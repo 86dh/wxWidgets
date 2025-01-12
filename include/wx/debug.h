@@ -15,6 +15,7 @@
 #include <limits.h>          // for CHAR_BIT used below
 
 #include "wx/chartype.h"     // for __TFILE__ and wxChar
+#include "wx/cpp.h"          // for wxSTATEMENT_MACRO_BEGIN etc
 #include "wx/dlimpexp.h"     // for WXDLLIMPEXP_FWD_BASE
 
 class WXDLLIMPEXP_FWD_BASE wxString;
@@ -294,7 +295,7 @@ extern WXDLLIMPEXP_BASE void wxOnAssert(const char *file,
     #define wxFAIL_COND_MSG_AT(cond, msg, file, line, func)                   \
         wxSTATEMENT_MACRO_BEGIN                                               \
             if ( wxTheAssertHandler &&                                        \
-                    (wxOnAssert(file, line, func, #cond, msg),                \
+                    (wxOnAssert(file, line, func, cond, msg),                 \
                      wxTrapInAssert) )                                        \
             {                                                                 \
                 wxTrapInAssert = false;                                       \

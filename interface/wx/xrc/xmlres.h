@@ -132,6 +132,24 @@ public:
     int CompareVersion(int major, int minor, int release, int revision) const;
 
     /**
+        Add a feature considered to be enabled.
+
+        Objects in XRC documents may have a "feature" attribute, as explained
+        in the @ref overview_xrcformat_features. By default, none of the
+        features is enabled and so all objects with this attribute are
+        discarded. Calling this function marks the given feature as being
+        enabled and affects the subsequent calls to LoadDocument() and related
+        functions, which will keep, rather than discard, any nodes using the
+        given @a feature string in their "feature" attribute.
+
+        This function can be called multiple times to enable more than one
+        feature.
+
+        @since 3.3.0
+     */
+    void EnableFeature(const wxString& feature);
+
+    /**
         Returns a string ID corresponding to the given numeric ID.
 
         The string returned is such that calling GetXRCID() with it as
@@ -263,7 +281,7 @@ public:
 
         @param doc A valid, i.e. non-null, document pointer ownership of which
             is passed to wxXmlResource, i.e. this pointer can't be used after
-            this function rteturns.
+            this function returns.
         @param name The name argument is optional, but may be provided if you
             plan to call Unload() later. It doesn't need to be an existing file
             or even conform to the usual form of file names as it is not
@@ -636,10 +654,16 @@ protected:
     bool GetBool(const wxString& param, bool defaultv = false);
 
     /**
-        Gets colour in HTML syntax (\#RRGGBB).
+        Gets colour from the given parameter.
+
+        If the colour is not specified, returns @a defaultLight or @a
+        defaultDark if the application is using dark mode.
+
+        Parameter @a defaultDark is only available since wxWidgets 3.3.0.
     */
     wxColour GetColour(const wxString& param,
-                       const wxColour& defaultColour = wxNullColour);
+                       const wxColour& defaultLight = wxNullColour,
+                       const wxColour& defaultDark = wxNullColour);
 
     /**
         Returns the current file system.
@@ -650,7 +674,7 @@ protected:
         Gets a dimension (may be in dialog units).
     */
     wxCoord GetDimension(const wxString& param, wxCoord defaultv = 0,
-                         wxWindow* windowToUse = 0);
+                         wxWindow* windowToUse = nullptr);
 
     /**
         Gets a direction.
@@ -736,10 +760,31 @@ protected:
         @since 3.1.0
     */
     bool IsObjectNode(const wxXmlNode *node) const;
+
+    /**
+        Returns the node name.
+
+        Returns empty string if @a node is @NULL.
+
+        @since 3.3.0
+    */
+    wxString GetNodeName(wxXmlNode* node) const;
+
+    /**
+        Gets the node attribute value.
+
+        If @a node is @NULL or the attribute is not present, returns @a defaultValue.
+
+        @since 3.3.0
+    */
+    wxString GetNodeAttribute(const wxXmlNode *node,
+                              const wxString& attrName,
+                              const wxString& defaultValue = {}) const;
+
     /**
         Gets node content from wxXML_ENTITY_NODE.
     */
-    wxString GetNodeContent(wxXmlNode* node);
+    wxString GetNodeContent(wxXmlNode* node) const;
 
     /**
         Gets the parent of the node given.
@@ -791,13 +836,15 @@ protected:
 
     /**
         Gets the position (may be in dialog units).
+
+        The @a windowToUse argument is only available since wxWidgets 3.3.0.
     */
-    wxPoint GetPosition(const wxString& param = "pos");
+    wxPoint GetPosition(const wxString& param = "pos", wxWindow* windowToUse = nullptr);
 
     /**
         Gets the size (may be in dialog units).
     */
-    wxSize GetSize(const wxString& param = "size", wxWindow* windowToUse = 0);
+    wxSize GetSize(const wxString& param = "size", wxWindow* windowToUse = nullptr);
 
     /**
         Gets style flags from text in form "flag | flag2| flag3 |..."

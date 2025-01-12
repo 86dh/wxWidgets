@@ -152,6 +152,7 @@
 #include <wx/fontutil.h>
 #include <wx/frame.h>
 #include <wx/fs_arc.h>
+#include <wx/fs_data.h>
 #include <wx/fs_filter.h>
 #include <wx/fs_inet.h>
 #include <wx/fs_mem.h>
@@ -220,7 +221,6 @@
 #include <wx/mdi.h>
 #include <wx/mediactrl.h>
 #include <wx/memconf.h>
-#include <wx/memory.h>
 #include <wx/memtext.h>
 #include <wx/menu.h>
 #include <wx/menuitem.h>
@@ -318,6 +318,7 @@
 #include <wx/statline.h>
 #include <wx/stattext.h>
 #include <wx/statusbr.h>
+#include <wx/stc/stc.h>
 #include <wx/stdpaths.h>
 #include <wx/stdstream.h>
 #include <wx/stockitem.h>

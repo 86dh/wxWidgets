@@ -2,7 +2,6 @@
 // Name:        src/osx/iphone/nonownedwnd.mm
 // Purpose:     non owned window for iphone
 // Author:      Stefan Csomor
-// Modified by:
 // Created:     2008-06-20
 // Copyright:   (c) Stefan Csomor
 // Licence:     wxWindows licence
@@ -46,6 +45,22 @@ wxPoint wxFromNSPoint( UIView* parent, const CGPoint& p )
     int x = p.x;
     int y = p.y;
     return wxPoint( x, y);
+}
+
+CGPoint wxToNSPointF( UIView* parent, const wxPoint2DDouble& p )
+{
+    CGRect frame = parent ? [parent bounds] : [[UIScreen mainScreen] bounds];
+    double x = p.m_x;
+    double y = p.m_y;
+    return CGPointMake(x, y);
+}
+
+wxPoint2DDouble wxFromNSPointF( UIView* parent, const CGPoint& p )
+{
+    CGRect frame = parent ? [parent bounds] : [[UIScreen mainScreen] bounds];
+    double x = p.x;
+    double y = p.y;
+    return wxPoint2DDouble(x, y);
 }
 
 @interface wxUIContentViewController : UIViewController

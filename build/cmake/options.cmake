@@ -16,6 +16,8 @@ wx_option(wxBUILD_TESTS "Build console tests (CONSOLE_ONLY) or ALL" OFF
     STRINGS CONSOLE_ONLY ALL OFF)
 wx_option(wxBUILD_DEMOS "Build demos" OFF)
 wx_option(wxBUILD_BENCHMARKS "Build benchmarks" OFF)
+wx_option(wxBUILD_LOCALES "Build locales" AUTO STRINGS ON OFF AUTO)
+mark_as_advanced(wxBUILD_LOCALES)
 wx_option(wxBUILD_PRECOMP "Use precompiled headers" ON STRINGS ON OFF COTIRE)
 mark_as_advanced(wxBUILD_PRECOMP)
 wx_option(wxBUILD_INSTALL "Create install/uninstall target for wxWidgets")
@@ -43,17 +45,18 @@ if(MSVC)
     mark_as_advanced(wxBUILD_MSVC_MULTIPROC)
 endif()
 
-if(NOT MSVC OR MSVC_VERSION GREATER 1800)
-    # support setting the C++ standard, present it an option to the user
-    if(DEFINED CMAKE_CXX_STANDARD)
-        set(wxCXX_STANDARD_DEFAULT ${CMAKE_CXX_STANDARD})
-    elseif(APPLE)
-        set(wxCXX_STANDARD_DEFAULT 11)
-    else()
-        set(wxCXX_STANDARD_DEFAULT COMPILER_DEFAULT)
-    endif()
-    wx_option(wxBUILD_CXX_STANDARD "C++ standard used to build wxWidgets targets"
-              ${wxCXX_STANDARD_DEFAULT} STRINGS COMPILER_DEFAULT 11 14 17 20)
+# support setting the C++ standard, present it an option to the user
+if(DEFINED CMAKE_CXX_STANDARD)
+    set(wxCXX_STANDARD_DEFAULT ${CMAKE_CXX_STANDARD})
+else()
+    set(wxCXX_STANDARD_DEFAULT COMPILER_DEFAULT)
+endif()
+wx_option(wxBUILD_CXX_STANDARD "C++ standard used to build wxWidgets targets"
+          ${wxCXX_STANDARD_DEFAULT} STRINGS COMPILER_DEFAULT 11 14 17 20)
+
+if(UNIX)
+    wx_option(wxBUILD_LARGEFILE_SUPPORT "support for large files")
+    mark_as_advanced(wxBUILD_LARGEFILE_SUPPORT)
 endif()
 
 if(WIN32)
@@ -75,20 +78,29 @@ wx_option(wxBUILD_PIC "Enable position independent code (PIC)." ON)
 mark_as_advanced(wxBUILD_PIC)
 wx_option(wxUSE_NO_RTTI "disable RTTI support" OFF)
 
+set(wxBUILD_INSTALL_RUNTIME_DIR "" CACHE PATH "override default sub-directory to install runtime files")
+mark_as_advanced(wxBUILD_INSTALL_RUNTIME_DIR)
+set(wxBUILD_INSTALL_LIBRARY_DIR "" CACHE PATH "override default sub-directory to install library files")
+mark_as_advanced(wxBUILD_INSTALL_LIBRARY_DIR)
+set(wxBUILD_INSTALL_ARCHIVE_DIR "" CACHE PATH "override default sub-directory to install archive files")
+mark_as_advanced(wxBUILD_INSTALL_ARCHIVE_DIR)
+wx_option(wxBUILD_INSTALL_PLATFORM_SUBDIR "platform specific sub-directory (MSVC-naming)" ON)
+mark_as_advanced(wxBUILD_INSTALL_PLATFORM_SUBDIR)
+wx_option(wxBUILD_INSTALL_PDB "install pdb files in the runtime direcotry (MSVC)" OFF)
+mark_as_advanced(wxBUILD_INSTALL_PDB)
+
+
 # STL options
 wx_option(wxUSE_STD_IOSTREAM "use standard C++ streams" ON)
-wx_option(wxUSE_STL "use standard C++ classes for everything" OFF)
-set(wxTHIRD_PARTY_LIBRARIES ${wxTHIRD_PARTY_LIBRARIES} wxUSE_STL "use C++ STL classes")
-wx_dependent_option(wxUSE_STD_CONTAINERS "use standard C++ container classes" ON "wxUSE_STL" OFF)
+wx_option(wxUSE_STD_CONTAINERS "use standard C++ container classes" ON)
 
-if(NOT WIN32)
-    wx_option(wxUSE_UNICODE_UTF8 "use UTF-8 representation for strings (Unix only)" OFF)
-    wx_dependent_option(wxUSE_UTF8_LOCALE_ONLY "only support UTF-8 locales in UTF-8 build (Unix only)" ON "wxUSE_UNICODE_UTF8" OFF)
-endif()
+wx_option(wxUSE_UNICODE_UTF8 "use UTF-8 representation for strings" OFF)
+wx_dependent_option(wxUSE_UTF8_LOCALE_ONLY "only support UTF-8 locales in UTF-8 build" ON "wxUSE_UNICODE_UTF8" OFF)
 
 if(NOT WIN32)
     wx_option(wxUSE_VISIBILITY "use of ELF symbols visibility")
 endif()
+wx_option(wxUSE_STD_STRING_CONV_IN_WXSTRING "provide implicit conversions to std::wstring and std::string in wxString" OFF)
 wx_option(wxUSE_UNSAFE_WXSTRING_CONV "provide unsafe implicit conversions in wxString to const char* or std::string")
 wx_option(wxUSE_REPRODUCIBLE_BUILD "enable reproducable build" OFF)
 
@@ -185,7 +197,6 @@ wx_option(wxUSE_FSVOLUME "use wxFSVolume class")
 wx_option(wxUSE_FSWATCHER "use wxFileSystemWatcher class")
 wx_option(wxUSE_GEOMETRY "use geometry class")
 wx_option(wxUSE_LOG "use logging system")
-wx_option(wxUSE_LONGLONG "use wxLongLong class")
 wx_option(wxUSE_MIMETYPE "use wxMimeTypesManager")
 wx_option(wxUSE_PRINTF_POS_PARAMS "use wxVsnprintf() which supports positional parameters")
 wx_option(wxUSE_SECRETSTORE "use wxSecretStore class")
@@ -271,6 +282,7 @@ wx_option(wxUSE_AFM_FOR_POSTSCRIPT "in wxPostScriptDC class use AFM (adobe font 
 wx_option(wxUSE_PRINTING_ARCHITECTURE "use printing architecture")
 wx_option(wxUSE_SVG "use wxSVGFileDC device context")
 wx_option(wxUSE_WEBVIEW "use wxWebView library")
+wx_option(wxUSE_WEBVIEW_CHROMIUM "Enable CEF based wxWebViewChromium" OFF)
 
 # wxDC is implemented in terms of wxGraphicsContext in wxOSX so the latter
 # can't be disabled, don't even provide an option to do it
@@ -393,7 +405,6 @@ wx_option(wxUSE_TREELISTCTRL "use wxTreeListCtrl class")
 # common dialogs
 # ---------------------------------------------------------------------------
 
-wx_option(wxUSE_COMMON_DIALOGS "use all common dialogs")
 wx_option(wxUSE_ABOUTDLG "use wxAboutBox")
 wx_option(wxUSE_CHOICEDLG "use wxChoiceDialog")
 wx_option(wxUSE_COLOURDLG "use wxColourDialog")
@@ -460,13 +471,12 @@ wx_option(wxUSE_ICO_CUR "use Windows ICO and CUR formats")
 # ---------------------------------------------------------------------------
 
 if(WIN32)
-    if(MSVC_VERSION GREATER 1600 AND NOT CMAKE_VS_PLATFORM_TOOLSET MATCHES "_xp$")
+    if(MSVC)
         set(wxUSE_WINRT_DEFAULT ON)
     else()
         set(wxUSE_WINRT_DEFAULT OFF)
     endif()
-    if(MSVC_VERSION GREATER 1800 AND NOT CMAKE_VS_PLATFORM_TOOLSET MATCHES "_xp$" AND
-        EXISTS "${wxSOURCE_DIR}/3rdparty/webview2")
+    if(EXISTS "${wxSOURCE_DIR}/3rdparty/webview2")
         set(wxUSE_WEBVIEW_EDGE_DEFAULT ON)
     else()
         set(wxUSE_WEBVIEW_EDGE_DEFAULT OFF)
@@ -482,7 +492,7 @@ if(WIN32)
     wx_option(wxUSE_POSTSCRIPT_ARCHITECTURE_IN_MSW "use PS printing in wxMSW (Win32 only)")
     wx_option(wxUSE_TASKBARICON_BALLOONS "enable wxTaskBarIcon::ShowBalloon() method (Win32 only)")
     wx_option(wxUSE_UXTHEME "enable support for Windows XP themed look (Win32 only)")
-    wx_option(wxUSE_WEBVIEW_EDGE "use wxWebView Edge (Chromium) backend (Windows 7+ only)" ${wxUSE_WEBVIEW_EDGE_DEFAULT})
+    wx_option(wxUSE_WEBVIEW_EDGE "use wxWebView Edge (Chromium) backend (Windows only)" ${wxUSE_WEBVIEW_EDGE_DEFAULT})
     wx_option(wxUSE_WEBVIEW_EDGE_STATIC "use wxWebView Edge with static loader" OFF)
     wx_option(wxUSE_WEBVIEW_IE "use wxWebView IE backend (Win32 only)")
     wx_option(wxUSE_WINRT "enable WinRT support" ${wxUSE_WINRT_DEFAULT})

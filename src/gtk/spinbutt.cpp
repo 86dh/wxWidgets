@@ -2,7 +2,6 @@
 // Name:        src/gtk/spinbutt.cpp
 // Purpose:     wxSpinButton
 // Author:      Robert
-// Modified by:
 // Copyright:   (c) Robert Roebling
 // Licence:     wxWindows licence
 /////////////////////////////////////////////////////////////////////////////
@@ -192,13 +191,12 @@ void wxSpinButton::SetRange(int minVal, int maxVal)
     // wrapping is on (The maximal page increment of 10 is consistent with the
     // default page increment set by gtk_spin_button_new_with_range(0, 100, 1)
     // in wxSpinButton::Create().)
-    const int range = maxVal - minVal;
     int pageInc;
-    if ( range < 10 )
+    if ( maxVal < minVal + 10 )
         pageInc = 1;
-    else if ( range < 20 )
+    else if ( maxVal < minVal + 20 )
         pageInc = 2;
-    else if ( range < 50 )
+    else if ( maxVal < minVal + 50 )
         pageInc = 5;
     else
         pageInc = 10;

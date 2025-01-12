@@ -4,7 +4,6 @@
 //              wxWidgets itself, it may contain identifiers which don't start
 //              with "wx".
 // Author:      Stefan Csomor
-// Modified by:
 // Created:     1998-01-01
 // Copyright:   (c) Stefan Csomor
 // Licence:     wxWindows licence
@@ -18,6 +17,8 @@
 #ifdef __OBJC__
     #import <Cocoa/Cocoa.h>
 #endif
+
+#include <vector>
 
 //
 // shared between Cocoa and Carbon
@@ -37,7 +38,8 @@ OSStatus WXDLLIMPEXP_CORE wxMacDrawCGImage(
 void WXDLLIMPEXP_CORE wxOSXDrawNSImage(
                                            CGContextRef    inContext,
                                            const CGRect *  inBounds,
-                                           WX_NSImage      inImage) ;
+                                           WX_NSImage      inImage,
+                                           wxCompositionMode composition) ;
 WX_NSImage WXDLLIMPEXP_CORE wxOSXGetSystemImage(const wxString& name);
 WX_NSImage WXDLLIMPEXP_CORE wxOSXGetNSImageFromCGImage( CGImageRef image, double scale = 1.0, bool isTemplate = false);
 WX_NSImage WXDLLIMPEXP_CORE wxOSXGetNSImageFromIconRef( WXHICON iconref );
@@ -172,7 +174,10 @@ public :
     virtual void        DoNotifyFocusEvent(bool receivedFocus, wxWidgetImpl* otherWindow);
 
     virtual void        SetupKeyEvent(wxKeyEvent &wxevent, NSEvent * nsEvent, NSString* charString = nullptr);
-    virtual void        SetupMouseEvent(wxMouseEvent &wxevent, NSEvent * nsEvent);
+
+    using MouseEvents = std::vector<wxMouseEvent>;
+    virtual MouseEvents TranslateMouseEvent(NSEvent * nsEvent);
+
     void                SetupCoordinates(wxCoord &x, wxCoord &y, NSEvent *nsEvent);
     virtual bool        SetupCursor(NSEvent* event);
 
@@ -183,6 +188,7 @@ public :
     virtual void        TouchesBegan(NSEvent *event);
     virtual void        TouchesMoved(NSEvent *event);
     virtual void        TouchesEnded(NSEvent *event);
+    virtual void        TouchesCancel(NSEvent *event);
 
 #if !wxOSX_USE_NATIVE_FLIPPED
     void                SetFlipped(bool flipped);
@@ -220,9 +226,14 @@ public :
     // from the same pimpl class.
     virtual void                controlTextDidChange();
 
+    virtual void                AdjustClippingView(wxScrollBar* horizontal, wxScrollBar* vertical) override;
+    virtual void                UseClippingView() override;
+    virtual WXWidget            GetContainer() const override { return m_osxClipView ? m_osxClipView : m_osxView; }
+
 protected:
     WXWidget m_osxView;
-    
+    WXWidget m_osxClipView;
+
     // begins processing of native key down event, storing the native event for later wx event generation
     void BeginNativeKeyDownEvent( NSEvent* event );
     // done with the current native key down event
@@ -391,6 +402,8 @@ public:
     WXDLLIMPEXP_CORE wxRect wxFromNSRect( NSView* parent, const NSRect& rect );
     WXDLLIMPEXP_CORE NSPoint wxToNSPoint( NSView* parent, const wxPoint& p );
     WXDLLIMPEXP_CORE wxPoint wxFromNSPoint( NSView* parent, const NSPoint& p );
+    WXDLLIMPEXP_CORE NSPoint wxToNSPointF(NSView* parent, const wxPoint2DDouble& p);
+    WXDLLIMPEXP_CORE wxPoint2DDouble wxFromNSPointF(NSView* parent, const NSPoint& p);
 
     NSRect WXDLLIMPEXP_CORE wxOSXGetFrameForControl( wxWindowMac* window , const wxPoint& pos , const wxSize &size ,
         bool adjustForOrigin = true );
@@ -536,6 +549,7 @@ WX_NSCursor  wxMacCocoaCreateCursorFromCGImage( CGImageRef cgImageRef, float hot
 void  wxMacCocoaSetCursor( WX_NSCursor cursor );
 void  wxMacCocoaHideCursor();
 void  wxMacCocoaShowCursor();
+wxPoint  wxMacCocoaGetCursorHotSpot( WX_NSCursor cursor );
 
 typedef struct tagClassicCursor
 {

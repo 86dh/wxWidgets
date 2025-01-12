@@ -82,14 +82,7 @@
 #ifdef __VISUALC__
     /*  the only "real" warning here is 4244 but there are just too many of them */
     /*  in our code... one day someone should go and fix them but until then... */
-#   pragma warning(disable:4097)    /*  typedef used as class */
-#   pragma warning(disable:4201)    /*  nonstandard extension used: nameless struct/union */
 #   pragma warning(disable:4244)    /*  conversion from double to float */
-#   pragma warning(disable:4355)    /* 'this' used in base member initializer list */
-#   pragma warning(disable:4511)    /*  copy ctor couldn't be generated */
-#   pragma warning(disable:4512)    /*  operator=() couldn't be generated */
-#   pragma warning(disable:4514)   /*  unreferenced inline func has been removed */
-#   pragma warning(disable:4710)    /*  function not inlined */
 
     /*
         TODO: this warning should really be enabled as it can be genuinely
@@ -163,6 +156,12 @@
 #   endif
 #endif
 
+/* Prevents conflicts between sys/types.h and winsock.h with Cygwin, */
+/* when using Windows sockets. */
+#if defined(__CYGWIN__) && defined(__WINDOWS__)
+#define __USE_W32_SOCKETS
+#endif
+
 /*  ---------------------------------------------------------------------------- */
 /*  wxWidgets version and compatibility defines */
 /*  ---------------------------------------------------------------------------- */
@@ -197,6 +196,15 @@
     #endif
 #else
     #define wxCHECK_CXX_STD(ver) 0
+#endif
+
+/**
+ * C++ header checks
+ */
+#if defined(__has_include)
+    #define wxHAS_CXX17_INCLUDE(header) (wxCHECK_CXX_STD(201703L) && __has_include(header))
+#else
+    #define wxHAS_CXX17_INCLUDE(header) 0
 #endif
 
 /*  ---------------------------------------------------------------------------- */
@@ -265,12 +273,23 @@ typedef short int WXTYPE;
     #define wxNODISCARD [[nodiscard]]
 #elif defined(__VISUALC__)
     #define wxNODISCARD _Check_return_
-#elif defined(__clang__) || defined(__GNUCC__)
+#elif defined(__clang__) || defined(__GNUC__)
     #define wxNODISCARD __attribute__ ((warn_unused_result))
 #else
     #define wxNODISCARD
 #endif
 
+/* wxWARN_UNUSED is used as an attribute to a class, stating that unused instances
+   should be warned about (in case such warnings are enabled in the first place) */
+
+#ifdef __has_attribute /* __has_cpp_attribute(warn_unused) would return false with Clang, */
+    #if __has_attribute(warn_unused) /* so use __has_attribute instead */
+        #define wxWARN_UNUSED __attribute__((warn_unused))
+    #endif
+#endif
+#ifndef wxWARN_UNUSED
+    #define wxWARN_UNUSED
+#endif
 
 /* these macros are obsolete, use the standard C++ casts directly now */
 #define wx_static_cast(t, x) static_cast<t>(x)
@@ -565,14 +584,16 @@ typedef short int WXTYPE;
 #define wxDEPRECATED_ACCESSOR(func, what) wxDEPRECATED_INLINE(func, return what;)
 
 /*
-   Special variant of the macro above which should be used for the functions
+   Special variant of the macros above which should be used for the functions
    which are deprecated but called by wx itself: this often happens with
    deprecated virtual functions which are called by the library.
  */
 #ifdef WXBUILDING
 #   define wxDEPRECATED_BUT_USED_INTERNALLY(x) x
+#   define wxDEPRECATED_BUT_USED_INTERNALLY_MSG(x)
 #else
 #   define wxDEPRECATED_BUT_USED_INTERNALLY(x) wxDEPRECATED(x)
+#   define wxDEPRECATED_BUT_USED_INTERNALLY_MSG(x) wxDEPRECATED_MSG(x)
 #endif
 
 /*
@@ -639,7 +660,7 @@ typedef short int WXTYPE;
 /*
     Similar macros but for gcc-specific warnings.
  */
-#ifdef __GNUC__
+#if defined(__GNUC__) && !defined(__clang__)
 #   define wxGCC_ONLY_WARNING_SUPPRESS(x) wxGCC_WARNING_SUPPRESS(x)
 #   define wxGCC_ONLY_WARNING_RESTORE(x) wxGCC_WARNING_RESTORE(x)
 #else
@@ -772,19 +793,22 @@ typedef short int WXTYPE;
 
 
 #define wxDEFINE_COMPARISON(op, T1, T2, cmp) \
-    inline bool operator op(T1 x, T2 y) { return cmp(x, y, op); }
+    friend bool operator op(T1 x, T2 y) { return cmp(x, y, op); }
 
 #define wxDEFINE_COMPARISON_REV(op, T1, T2, cmp, oprev) \
-    inline bool operator op(T2 y, T1 x) { return cmp(x, y, oprev); }
+    friend bool operator op(T2 y, T1 x) { return cmp(x, y, oprev); }
 
 #define wxDEFINE_COMPARISON_BY_REV(op, T1, T2, oprev) \
-    inline bool operator op(T1 x, T2 y) { return y oprev x; }
+    friend bool operator op(T1 x, T2 y) { return y oprev x; }
 
 /*
     Define all 6 comparison operators (==, !=, <, <=, >, >=) for the given
     types in the specified order. The implementation is provided by the cmp
     macro. Normally wxDEFINE_ALL_COMPARISONS should be used as comparison
     operators are usually symmetric.
+
+    Note that comparison operators are defined as hidden friends and so this
+    macro can only be used inside the class declaration.
  */
 #define wxDEFINE_COMPARISONS(T1, T2, cmp) \
     wxFOR_ALL_COMPARISONS_3(wxDEFINE_COMPARISON, T1, T2, cmp)
@@ -793,6 +817,9 @@ typedef short int WXTYPE;
     Define all 6 comparison operators (==, !=, <, <=, >, >=) for the given
     types in the specified order, implemented in terms of existing operators
     for the reverse order.
+
+    Note that comparison operators are defined as hidden friends and so this
+    macro can only be used inside the class declaration.
  */
 #define wxDEFINE_COMPARISONS_BY_REV(T1, T2) \
     wxFOR_ALL_COMPARISONS_2_REV(wxDEFINE_COMPARISON_BY_REV, T1, T2)
@@ -849,13 +876,6 @@ typedef short int WXTYPE;
 /*  ---------------------------------------------------------------------------- */
 /*  compiler specific settings */
 /*  ---------------------------------------------------------------------------- */
-
-/*  where should i put this? we need to make sure of this as it breaks */
-/*  the <iostream> code. */
-#if defined(__WXDEBUG__)
-#    undef wxUSE_DEBUG_NEW_ALWAYS
-#    define wxUSE_DEBUG_NEW_ALWAYS 0
-#endif
 
 #include "wx/types.h"
 
@@ -993,20 +1013,23 @@ typedef double wxDouble;
 
 /* Define wxChar16 and wxChar32                                              */
 
+#ifdef __cplusplus
+
 #if SIZEOF_WCHAR_T == 2
     #define wxWCHAR_T_IS_WXCHAR16
     typedef wchar_t wxChar16;
 #else
-    typedef wxUint16 wxChar16;
+    typedef char16_t wxChar16;
 #endif
 
 #if SIZEOF_WCHAR_T == 4
     #define wxWCHAR_T_IS_WXCHAR32
     typedef wchar_t wxChar32;
 #else
-    typedef wxUint32 wxChar32;
+    typedef char32_t wxChar32;
 #endif
 
+#endif /* __cplusplus */
 
 /*
     Helper macro expanding into the given "m" macro invoked with each of the
@@ -1108,51 +1131,27 @@ typedef double wxDouble;
     (((wxUint32) (val) & (wxUint32) 0xff000000U) >> 24)))
 /*  machine specific byte swapping */
 
-#ifdef wxLongLong_t
-    #define wxUINT64_SWAP_ALWAYS(val) \
-       ((wxUint64) ( \
-        (((wxUint64) (val) & (wxUint64) wxULL(0x00000000000000ff)) << 56) | \
-        (((wxUint64) (val) & (wxUint64) wxULL(0x000000000000ff00)) << 40) | \
-        (((wxUint64) (val) & (wxUint64) wxULL(0x0000000000ff0000)) << 24) | \
-        (((wxUint64) (val) & (wxUint64) wxULL(0x00000000ff000000)) <<  8) | \
-        (((wxUint64) (val) & (wxUint64) wxULL(0x000000ff00000000)) >>  8) | \
-        (((wxUint64) (val) & (wxUint64) wxULL(0x0000ff0000000000)) >> 24) | \
-        (((wxUint64) (val) & (wxUint64) wxULL(0x00ff000000000000)) >> 40) | \
-        (((wxUint64) (val) & (wxUint64) wxULL(0xff00000000000000)) >> 56)))
+#define wxUINT64_SWAP_ALWAYS(val) \
+   ((wxUint64) ( \
+    (((wxUint64) (val) & (wxUint64) wxULL(0x00000000000000ff)) << 56) | \
+    (((wxUint64) (val) & (wxUint64) wxULL(0x000000000000ff00)) << 40) | \
+    (((wxUint64) (val) & (wxUint64) wxULL(0x0000000000ff0000)) << 24) | \
+    (((wxUint64) (val) & (wxUint64) wxULL(0x00000000ff000000)) <<  8) | \
+    (((wxUint64) (val) & (wxUint64) wxULL(0x000000ff00000000)) >>  8) | \
+    (((wxUint64) (val) & (wxUint64) wxULL(0x0000ff0000000000)) >> 24) | \
+    (((wxUint64) (val) & (wxUint64) wxULL(0x00ff000000000000)) >> 40) | \
+    (((wxUint64) (val) & (wxUint64) wxULL(0xff00000000000000)) >> 56)))
 
-    #define wxINT64_SWAP_ALWAYS(val) \
-       ((wxInt64) ( \
-        (((wxUint64) (val) & (wxUint64) wxULL(0x00000000000000ff)) << 56) | \
-        (((wxUint64) (val) & (wxUint64) wxULL(0x000000000000ff00)) << 40) | \
-        (((wxUint64) (val) & (wxUint64) wxULL(0x0000000000ff0000)) << 24) | \
-        (((wxUint64) (val) & (wxUint64) wxULL(0x00000000ff000000)) <<  8) | \
-        (((wxUint64) (val) & (wxUint64) wxULL(0x000000ff00000000)) >>  8) | \
-        (((wxUint64) (val) & (wxUint64) wxULL(0x0000ff0000000000)) >> 24) | \
-        (((wxUint64) (val) & (wxUint64) wxULL(0x00ff000000000000)) >> 40) | \
-        (((wxUint64) (val) & (wxUint64) wxULL(0xff00000000000000)) >> 56)))
-#elif wxUSE_LONGLONG /*  !wxLongLong_t */
-    #define wxUINT64_SWAP_ALWAYS(val) \
-       ((wxUint64) ( \
-        ((wxULongLong(val) & wxULongLong(0L, 0x000000ffU)) << 56) | \
-        ((wxULongLong(val) & wxULongLong(0L, 0x0000ff00U)) << 40) | \
-        ((wxULongLong(val) & wxULongLong(0L, 0x00ff0000U)) << 24) | \
-        ((wxULongLong(val) & wxULongLong(0L, 0xff000000U)) <<  8) | \
-        ((wxULongLong(val) & wxULongLong(0x000000ffL, 0U)) >>  8) | \
-        ((wxULongLong(val) & wxULongLong(0x0000ff00L, 0U)) >> 24) | \
-        ((wxULongLong(val) & wxULongLong(0x00ff0000L, 0U)) >> 40) | \
-        ((wxULongLong(val) & wxULongLong(0xff000000L, 0U)) >> 56)))
-
-    #define wxINT64_SWAP_ALWAYS(val) \
-       ((wxInt64) ( \
-        ((wxLongLong(val) & wxLongLong(0L, 0x000000ffU)) << 56) | \
-        ((wxLongLong(val) & wxLongLong(0L, 0x0000ff00U)) << 40) | \
-        ((wxLongLong(val) & wxLongLong(0L, 0x00ff0000U)) << 24) | \
-        ((wxLongLong(val) & wxLongLong(0L, 0xff000000U)) <<  8) | \
-        ((wxLongLong(val) & wxLongLong(0x000000ffL, 0U)) >>  8) | \
-        ((wxLongLong(val) & wxLongLong(0x0000ff00L, 0U)) >> 24) | \
-        ((wxLongLong(val) & wxLongLong(0x00ff0000L, 0U)) >> 40) | \
-        ((wxLongLong(val) & wxLongLong(0xff000000L, 0U)) >> 56)))
-#endif /*  wxLongLong_t/!wxLongLong_t */
+#define wxINT64_SWAP_ALWAYS(val) \
+   ((wxInt64) ( \
+    (((wxUint64) (val) & (wxUint64) wxULL(0x00000000000000ff)) << 56) | \
+    (((wxUint64) (val) & (wxUint64) wxULL(0x000000000000ff00)) << 40) | \
+    (((wxUint64) (val) & (wxUint64) wxULL(0x0000000000ff0000)) << 24) | \
+    (((wxUint64) (val) & (wxUint64) wxULL(0x00000000ff000000)) <<  8) | \
+    (((wxUint64) (val) & (wxUint64) wxULL(0x000000ff00000000)) >>  8) | \
+    (((wxUint64) (val) & (wxUint64) wxULL(0x0000ff0000000000)) >> 24) | \
+    (((wxUint64) (val) & (wxUint64) wxULL(0x00ff000000000000)) >> 40) | \
+    (((wxUint64) (val) & (wxUint64) wxULL(0xff00000000000000)) >> 56)))
 
 #ifdef WORDS_BIGENDIAN
     #define wxUINT16_SWAP_ON_BE(val)  wxUINT16_SWAP_ALWAYS(val)
@@ -1163,17 +1162,16 @@ typedef double wxDouble;
     #define wxINT32_SWAP_ON_BE(val)   wxINT32_SWAP_ALWAYS(val)
     #define wxUINT32_SWAP_ON_LE(val)  (val)
     #define wxINT32_SWAP_ON_LE(val)   (val)
-    #if wxHAS_INT64
-        #define wxUINT64_SWAP_ON_BE(val)  wxUINT64_SWAP_ALWAYS(val)
-        #define wxUINT64_SWAP_ON_LE(val)  (val)
-        #define wxINT64_SWAP_ON_BE(val)  wxINT64_SWAP_ALWAYS(val)
-        #define wxINT64_SWAP_ON_LE(val)  (val)
 
-        #define wxUINT64_SWAP_ON_BE_IN_PLACE(val)   val = wxUINT64_SWAP_ALWAYS(val)
-        #define wxINT64_SWAP_ON_BE_IN_PLACE(val)   val = wxINT64_SWAP_ALWAYS(val)
-        #define wxUINT64_SWAP_ON_LE_IN_PLACE(val)
-        #define wxINT64_SWAP_ON_LE_IN_PLACE(val)
-    #endif
+    #define wxUINT64_SWAP_ON_BE(val)  wxUINT64_SWAP_ALWAYS(val)
+    #define wxUINT64_SWAP_ON_LE(val)  (val)
+    #define wxINT64_SWAP_ON_BE(val)  wxINT64_SWAP_ALWAYS(val)
+    #define wxINT64_SWAP_ON_LE(val)  (val)
+
+    #define wxUINT64_SWAP_ON_BE_IN_PLACE(val)   val = wxUINT64_SWAP_ALWAYS(val)
+    #define wxINT64_SWAP_ON_BE_IN_PLACE(val)   val = wxINT64_SWAP_ALWAYS(val)
+    #define wxUINT64_SWAP_ON_LE_IN_PLACE(val)
+    #define wxINT64_SWAP_ON_LE_IN_PLACE(val)
 
     #define wxUINT16_SWAP_ON_BE_IN_PLACE(val)   val = wxUINT16_SWAP_ALWAYS(val)
     #define wxINT16_SWAP_ON_BE_IN_PLACE(val)   val = wxINT16_SWAP_ALWAYS(val)
@@ -1192,16 +1190,14 @@ typedef double wxDouble;
     #define wxINT32_SWAP_ON_LE(val)   wxINT32_SWAP_ALWAYS(val)
     #define wxUINT32_SWAP_ON_BE(val)  (val)
     #define wxINT32_SWAP_ON_BE(val)   (val)
-    #if wxHAS_INT64
-        #define wxUINT64_SWAP_ON_LE(val)  wxUINT64_SWAP_ALWAYS(val)
-        #define wxUINT64_SWAP_ON_BE(val)  (val)
-        #define wxINT64_SWAP_ON_LE(val)  wxINT64_SWAP_ALWAYS(val)
-        #define wxINT64_SWAP_ON_BE(val)  (val)
-        #define wxUINT64_SWAP_ON_BE_IN_PLACE(val)
-        #define wxINT64_SWAP_ON_BE_IN_PLACE(val)
-        #define wxUINT64_SWAP_ON_LE_IN_PLACE(val)   val = wxUINT64_SWAP_ALWAYS(val)
-        #define wxINT64_SWAP_ON_LE_IN_PLACE(val)   val = wxINT64_SWAP_ALWAYS(val)
-    #endif
+    #define wxUINT64_SWAP_ON_LE(val)  wxUINT64_SWAP_ALWAYS(val)
+    #define wxUINT64_SWAP_ON_BE(val)  (val)
+    #define wxINT64_SWAP_ON_LE(val)  wxINT64_SWAP_ALWAYS(val)
+    #define wxINT64_SWAP_ON_BE(val)  (val)
+    #define wxUINT64_SWAP_ON_BE_IN_PLACE(val)
+    #define wxINT64_SWAP_ON_BE_IN_PLACE(val)
+    #define wxUINT64_SWAP_ON_LE_IN_PLACE(val)   val = wxUINT64_SWAP_ALWAYS(val)
+    #define wxINT64_SWAP_ON_LE_IN_PLACE(val)   val = wxINT64_SWAP_ALWAYS(val)
 
     #define wxUINT16_SWAP_ON_BE_IN_PLACE(val)
     #define wxINT16_SWAP_ON_BE_IN_PLACE(val)
@@ -1443,8 +1439,6 @@ wxALLOW_COMBINING_ENUMS(wxSizerFlagBits, wxStretch)
 
 /*  wxALWAYS_SHOW_SB: instead of hiding the scrollbar when it is not needed, */
 /*  disable it - but still show (see also wxLB_ALWAYS_SB style) */
-/*  */
-/*  NB: as this style is only supported by wxUniversal and wxMSW so far */
 #define wxALWAYS_SHOW_SB        0x00800000
 
 /*  Clip children when painting, which reduces flicker in e.g. frames and */
@@ -2368,7 +2362,15 @@ enum wxKeyCode
     // These constants are the same as the corresponding GTK keys, so give them
     // the same value, but they are also generated by wxMSW.
     WXK_LAUNCH_APP1 = WXK_LAUNCH_A,
-    WXK_LAUNCH_APP2 = WXK_LAUNCH_B
+    WXK_LAUNCH_APP2 = WXK_LAUNCH_B,
+
+    // This one provides a portable way to refer to the key event generated by
+    // the "5" key on the numpad when Num Lock is off.
+#ifdef __WXMSW__
+    WXK_NUMPAD_CENTER = WXK_CLEAR
+#else
+    WXK_NUMPAD_CENTER = WXK_NUMPAD_BEGIN
+#endif
 };
 
 /* This enum contains bit mask constants used in wxKeyEvent */
@@ -2587,11 +2589,6 @@ typedef int (* LINKAGEMODE wxListIterateFunction)(void *current);
 /*  ---------------------------------------------------------------------------- */
 /*  miscellaneous */
 /*  ---------------------------------------------------------------------------- */
-
-/*  define this macro if font handling is done using the X font names */
-#if defined(__X__)
-    #define _WX_X_FONTLIKE
-#endif
 
 /*  macro to specify "All Files" on different platforms */
 #if defined(__WXMSW__)
@@ -3030,11 +3027,25 @@ typedef const void* WXWidget;
 /*  macros to define a class without copy ctor nor assignment operator */
 /*  --------------------------------------------------------------------------- */
 
+/* Obsolete macros kept only for compatibility, just use the corresponding
+   C++11 keywords directly in the class definition when writing new code. */
 #define wxMEMBER_DELETE = delete
+
+/* Also note that these macro do _not_ require a semicolon after them for
+   compatibility with wxWidgets 3.2. */
 #define wxDECLARE_DEFAULT_COPY_CTOR(classname) \
     public:                                    \
         classname(const classname&) = default;
 
+#define wxDECLARE_DEFAULT_COPY(classname)  \
+    wxDECLARE_DEFAULT_COPY_CTOR(classname) \
+    classname& operator=(const classname&) = default;
+
+#define wxDECLARE_DEFAULT_COPY_AND_DEF(classname) \
+    classname() = default;                        \
+    wxDECLARE_DEFAULT_COPY(classname);
+
+/* These macros do require a semicolon after them. */
 #define wxDECLARE_NO_COPY_CLASS(classname)      \
     private:                                    \
         classname(const classname&) wxMEMBER_DELETE; \

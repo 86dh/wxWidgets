@@ -2,7 +2,6 @@
 // Name:        src/msw/ole/oleutils.cpp
 // Purpose:     implementation of OLE helper functions
 // Author:      Vadim Zeitlin
-// Modified by:
 // Created:     19.02.98
 // Copyright:   (c) 1998 Vadim Zeitlin <zeitlin@dptmaths.ens-cachan.fr>
 // Licence:     wxWindows licence
@@ -127,7 +126,7 @@ bool wxVariantDataCurrency::Eq(wxVariantData& data) const
 }
 
 #if wxUSE_STD_IOSTREAM
-bool wxVariantDataCurrency::Write(wxSTD ostream& str) const
+bool wxVariantDataCurrency::Write(std::ostream& str) const
 {
     wxString s;
     Write(s);
@@ -180,7 +179,7 @@ bool wxVariantDataErrorCode::Eq(wxVariantData& data) const
 }
 
 #if wxUSE_STD_IOSTREAM
-bool wxVariantDataErrorCode::Write(wxSTD ostream& str) const
+bool wxVariantDataErrorCode::Write(std::ostream& str) const
 {
     wxString s;
     Write(s);
@@ -228,7 +227,7 @@ bool wxVariantDataSafeArray::Eq(wxVariantData& data) const
 }
 
 #if wxUSE_STD_IOSTREAM
-bool wxVariantDataSafeArray::Write(wxSTD ostream& str) const
+bool wxVariantDataSafeArray::Write(std::ostream& str) const
 {
     wxString s;
     Write(s);
@@ -294,13 +293,16 @@ WXDLLEXPORT bool wxConvertVariantToOle(const wxVariant& variant, VARIANTARG& ole
         oleVariant.vt = VT_I4;
         oleVariant.lVal = variant.GetLong() ;
     }
-#if wxUSE_LONGLONG
     else if (type == wxT("longlong"))
     {
         oleVariant.vt = VT_I8;
         oleVariant.llVal = variant.GetLongLong().GetValue();
     }
-#endif
+    else if (type == wxT("ulonglong"))
+    {
+        oleVariant.vt = VT_UI8;
+        oleVariant.ullVal = variant.GetULongLong().GetValue();
+    }
     else if (type == wxT("char"))
     {
         oleVariant.vt=VT_I1;            // Signed Char
@@ -466,11 +468,12 @@ wxConvertOleToVariant(const VARIANTARG& oleVariant, wxVariant& variant, long fla
 #endif // wxUSE_DATETIME
                 break;
 
-#if wxUSE_LONGLONG
             case VT_I8:
                 variant = wxLongLong(oleVariant.llVal);
                 break;
-#endif // wxUSE_LONGLONG
+            case VT_UI8:
+                variant = wxULongLong(oleVariant.ullVal);
+                break;
 
             case VT_I4:
             case VT_UI4:

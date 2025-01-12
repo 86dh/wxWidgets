@@ -622,7 +622,10 @@ class WXDLLIMPEXP_FWD_CORE wxScrollBar;
 #define wxSTC_LEX_DATAFLEX 129
 #define wxSTC_LEX_HOLLYWOOD 130
 #define wxSTC_LEX_RAKU 131
-#define wxSTC_LEX_LPEG 999
+#define wxSTC_LEX_FSHARP 132
+#define wxSTC_LEX_JULIA 133
+#define wxSTC_LEX_ASCIIDOC 134
+#define wxSTC_LEX_GDSCRIPT 135
 
 /// When a lexer specifies its language as SCLEX_AUTOMATIC it receives a
 /// value assigned in sequence from SCLEX_AUTOMATIC+1.
@@ -649,6 +652,7 @@ class WXDLLIMPEXP_FWD_CORE wxScrollBar;
 #define wxSTC_P_FCHARACTER 17
 #define wxSTC_P_FTRIPLE 18
 #define wxSTC_P_FTRIPLEDOUBLE 19
+#define wxSTC_P_ATTRIBUTE 20
 
 /// Lexical states for SCLEX_CPP
 /// Lexical states for SCLEX_BULLANT
@@ -759,7 +763,7 @@ class WXDLLIMPEXP_FWD_CORE wxScrollBar;
 /// More HTML
 #define wxSTC_H_VALUE 19
 
-/// X-Code
+/// X-Code, ASP.NET, JSP
 #define wxSTC_H_XCCOMMENT 20
 
 /// SGML
@@ -951,7 +955,11 @@ class WXDLLIMPEXP_FWD_CORE wxScrollBar;
 #define wxSTC_RB_STDIN 30
 #define wxSTC_RB_STDOUT 31
 #define wxSTC_RB_STDERR 40
-#define wxSTC_RB_UPPER_BOUND 41
+#define wxSTC_RB_STRING_W 41
+#define wxSTC_RB_STRING_I 42
+#define wxSTC_RB_STRING_QI 43
+#define wxSTC_RB_STRING_QS 44
+#define wxSTC_RB_UPPER_BOUND 45
 
 /// Lexical states for SCLEX_VB, SCLEX_VBSCRIPT, SCLEX_POWERBASIC, SCLEX_BLITZBASIC, SCLEX_PUREBASIC, SCLEX_FREEBASIC
 #define wxSTC_B_DEFAULT 0
@@ -1051,6 +1059,7 @@ class WXDLLIMPEXP_FWD_CORE wxScrollBar;
 #define wxSTC_ERR_ESCSEQ 23
 #define wxSTC_ERR_ESCSEQ_UNKNOWN 24
 #define wxSTC_ERR_GCC_EXCERPT 25
+#define wxSTC_ERR_BASH 26
 #define wxSTC_ERR_ES_BLACK 40
 #define wxSTC_ERR_ES_RED 41
 #define wxSTC_ERR_ES_GREEN 42
@@ -1077,6 +1086,7 @@ class WXDLLIMPEXP_FWD_CORE wxScrollBar;
 #define wxSTC_BAT_COMMAND 5
 #define wxSTC_BAT_IDENTIFIER 6
 #define wxSTC_BAT_OPERATOR 7
+#define wxSTC_BAT_AFTER_LABEL 8
 
 /// Lexical states for SCLEX_TCMD
 #define wxSTC_TCMD_DEFAULT 0
@@ -1335,7 +1345,7 @@ class WXDLLIMPEXP_FWD_CORE wxScrollBar;
 #define wxSTC_CSS_EXTENDED_IDENTIFIER 19
 #define wxSTC_CSS_EXTENDED_PSEUDOCLASS 20
 #define wxSTC_CSS_EXTENDED_PSEUDOELEMENT 21
-#define wxSTC_CSS_MEDIA 22
+#define wxSTC_CSS_GROUP_RULE 22
 #define wxSTC_CSS_VARIABLE 23
 
 /// Lexical states for SCLEX_POV
@@ -1527,6 +1537,30 @@ class WXDLLIMPEXP_FWD_CORE wxScrollBar;
 #define wxSTC_ERLANG_UNKNOWN 31
 
 /// Lexical states for SCLEX_OCTAVE are identical to MatLab
+/// Lexical states for SCLEX_JULIA
+#define wxSTC_JULIA_DEFAULT 0
+#define wxSTC_JULIA_COMMENT 1
+#define wxSTC_JULIA_NUMBER 2
+#define wxSTC_JULIA_KEYWORD1 3
+#define wxSTC_JULIA_KEYWORD2 4
+#define wxSTC_JULIA_KEYWORD3 5
+#define wxSTC_JULIA_CHAR 6
+#define wxSTC_JULIA_OPERATOR 7
+#define wxSTC_JULIA_BRACKET 8
+#define wxSTC_JULIA_IDENTIFIER 9
+#define wxSTC_JULIA_STRING 10
+#define wxSTC_JULIA_SYMBOL 11
+#define wxSTC_JULIA_MACRO 12
+#define wxSTC_JULIA_STRINGINTERP 13
+#define wxSTC_JULIA_DOCSTRING 14
+#define wxSTC_JULIA_STRINGLITERAL 15
+#define wxSTC_JULIA_COMMAND 16
+#define wxSTC_JULIA_COMMANDLITERAL 17
+#define wxSTC_JULIA_TYPEANNOT 18
+#define wxSTC_JULIA_LEXERROR 19
+#define wxSTC_JULIA_KEYWORD4 20
+#define wxSTC_JULIA_TYPEOPERATOR 21
+
 /// Lexical states for SCLEX_MSSQL
 #define wxSTC_MSSQL_DEFAULT 0
 #define wxSTC_MSSQL_COMMENT 1
@@ -2020,6 +2054,10 @@ class WXDLLIMPEXP_FWD_CORE wxScrollBar;
 #define wxSTC_R_IDENTIFIER 9
 #define wxSTC_R_INFIX 10
 #define wxSTC_R_INFIXEOL 11
+#define wxSTC_R_BACKTICKS 12
+#define wxSTC_R_RAWSTRING 13
+#define wxSTC_R_RAWSTRING2 14
+#define wxSTC_R_ESCAPESEQUENCE 15
 
 /// Lexical state for SCLEX_MAGIK
 #define wxSTC_MAGIK_DEFAULT 0
@@ -2370,16 +2408,18 @@ class WXDLLIMPEXP_FWD_CORE wxScrollBar;
 #define wxSTC_VISUALPROLOG_ANONYMOUS 10
 #define wxSTC_VISUALPROLOG_NUMBER 11
 #define wxSTC_VISUALPROLOG_OPERATOR 12
-#define wxSTC_VISUALPROLOG_CHARACTER 13
-#define wxSTC_VISUALPROLOG_CHARACTER_TOO_MANY 14
-#define wxSTC_VISUALPROLOG_CHARACTER_ESCAPE_ERROR 15
-#define wxSTC_VISUALPROLOG_STRING 16
+#define wxSTC_VISUALPROLOG_UNUSED1 13
+#define wxSTC_VISUALPROLOG_UNUSED2 14
+#define wxSTC_VISUALPROLOG_UNUSED3 15
+#define wxSTC_VISUALPROLOG_STRING_QUOTE 16
 #define wxSTC_VISUALPROLOG_STRING_ESCAPE 17
 #define wxSTC_VISUALPROLOG_STRING_ESCAPE_ERROR 18
-#define wxSTC_VISUALPROLOG_STRING_EOL_OPEN 19
-#define wxSTC_VISUALPROLOG_STRING_VERBATIM 20
-#define wxSTC_VISUALPROLOG_STRING_VERBATIM_SPECIAL 21
-#define wxSTC_VISUALPROLOG_STRING_VERBATIM_EOL 22
+#define wxSTC_VISUALPROLOG_UNUSED4 19
+#define wxSTC_VISUALPROLOG_STRING 20
+#define wxSTC_VISUALPROLOG_UNUSED5 21
+#define wxSTC_VISUALPROLOG_STRING_EOL 22
+#define wxSTC_VISUALPROLOG_EMBEDDED 23
+#define wxSTC_VISUALPROLOG_PLACEHOLDER 24
 
 /// Lexical states for SCLEX_STTXT
 #define wxSTC_STTXT_DEFAULT 0
@@ -2679,6 +2719,73 @@ class WXDLLIMPEXP_FWD_CORE wxScrollBar;
 #define wxSTC_RAKU_CALLABLE 26
 #define wxSTC_RAKU_GRAMMAR 27
 #define wxSTC_RAKU_CLASS 28
+
+/// Lexical states for SCLEX_FSHARP
+#define wxSTC_FSHARP_DEFAULT 0
+#define wxSTC_FSHARP_KEYWORD 1
+#define wxSTC_FSHARP_KEYWORD2 2
+#define wxSTC_FSHARP_KEYWORD3 3
+#define wxSTC_FSHARP_KEYWORD4 4
+#define wxSTC_FSHARP_KEYWORD5 5
+#define wxSTC_FSHARP_IDENTIFIER 6
+#define wxSTC_FSHARP_QUOT_IDENTIFIER 7
+#define wxSTC_FSHARP_COMMENT 8
+#define wxSTC_FSHARP_COMMENTLINE 9
+#define wxSTC_FSHARP_PREPROCESSOR 10
+#define wxSTC_FSHARP_LINENUM 11
+#define wxSTC_FSHARP_OPERATOR 12
+#define wxSTC_FSHARP_NUMBER 13
+#define wxSTC_FSHARP_CHARACTER 14
+#define wxSTC_FSHARP_STRING 15
+#define wxSTC_FSHARP_VERBATIM 16
+#define wxSTC_FSHARP_QUOTATION 17
+#define wxSTC_FSHARP_ATTRIBUTE 18
+#define wxSTC_FSHARP_FORMAT_SPEC 19
+
+/// Lexical states for SCLEX_ASCIIDOC
+#define wxSTC_ASCIIDOC_DEFAULT 0
+#define wxSTC_ASCIIDOC_STRONG1 1
+#define wxSTC_ASCIIDOC_STRONG2 2
+#define wxSTC_ASCIIDOC_EM1 3
+#define wxSTC_ASCIIDOC_EM2 4
+#define wxSTC_ASCIIDOC_HEADER1 5
+#define wxSTC_ASCIIDOC_HEADER2 6
+#define wxSTC_ASCIIDOC_HEADER3 7
+#define wxSTC_ASCIIDOC_HEADER4 8
+#define wxSTC_ASCIIDOC_HEADER5 9
+#define wxSTC_ASCIIDOC_HEADER6 10
+#define wxSTC_ASCIIDOC_ULIST_ITEM 11
+#define wxSTC_ASCIIDOC_OLIST_ITEM 12
+#define wxSTC_ASCIIDOC_BLOCKQUOTE 13
+#define wxSTC_ASCIIDOC_LINK 14
+#define wxSTC_ASCIIDOC_CODEBK 15
+#define wxSTC_ASCIIDOC_PASSBK 16
+#define wxSTC_ASCIIDOC_COMMENT 17
+#define wxSTC_ASCIIDOC_COMMENTBK 18
+#define wxSTC_ASCIIDOC_LITERAL 19
+#define wxSTC_ASCIIDOC_LITERALBK 20
+#define wxSTC_ASCIIDOC_ATTRIB 21
+#define wxSTC_ASCIIDOC_ATTRIBVAL 22
+#define wxSTC_ASCIIDOC_MACRO 23
+
+/// Lexical states for SCLEX_GDSCRIPT
+#define wxSTC_GD_DEFAULT 0
+#define wxSTC_GD_COMMENTLINE 1
+#define wxSTC_GD_NUMBER 2
+#define wxSTC_GD_STRING 3
+#define wxSTC_GD_CHARACTER 4
+#define wxSTC_GD_WORD 5
+#define wxSTC_GD_TRIPLE 6
+#define wxSTC_GD_TRIPLEDOUBLE 7
+#define wxSTC_GD_CLASSNAME 8
+#define wxSTC_GD_FUNCNAME 9
+#define wxSTC_GD_OPERATOR 10
+#define wxSTC_GD_IDENTIFIER 11
+#define wxSTC_GD_COMMENTBLOCK 12
+#define wxSTC_GD_STRINGEOL 13
+#define wxSTC_GD_WORD2 14
+#define wxSTC_GD_ANNOTATION 15
+#define wxSTC_GD_NODEPATH 16
 
 //}}}
 //----------------------------------------------------------------------
@@ -3107,7 +3214,7 @@ public:
     wxStyledTextCtrl(wxWindow *parent, wxWindowID id=wxID_ANY,
                      const wxPoint& pos = wxDefaultPosition,
                      const wxSize& size = wxDefaultSize, long style = 0,
-                     const wxString& name = wxSTCNameStr);
+                     const wxString& name = wxASCII_STR(wxSTCNameStr));
     wxStyledTextCtrl() { m_swx = nullptr; }
     ~wxStyledTextCtrl();
 
@@ -3116,7 +3223,7 @@ public:
     bool Create(wxWindow *parent, wxWindowID id=wxID_ANY,
                 const wxPoint& pos = wxDefaultPosition,
                 const wxSize& size = wxDefaultSize, long style = 0,
-                const wxString& name = wxSTCNameStr);
+                const wxString& name = wxASCII_STR(wxSTCNameStr));
 
 
     //----------------------------------------------------------------------
@@ -4210,13 +4317,6 @@ public:
 
     // Append a string to the end of the document without changing the selection.
     void AppendText(const wxString& text) override;
-
-    // Is drawing done in two phases with backgrounds drawn before foregrounds?
-    bool GetTwoPhaseDraw() const;
-
-    // In twoPhaseDraw mode, drawing is performed in two phases, first the background
-    // and then the foreground. This avoids chopping off characters that overlap the next run.
-    void SetTwoPhaseDraw(bool twoPhase);
 
     // How many phases is drawing done in?
     int GetPhasesDraw() const;
@@ -5407,6 +5507,9 @@ public:
     // Result is NUL-terminated.
     wxString DescriptionOfStyle(int style) const;
 
+    // Set the lexer from an ILexer*.
+    void SetILexer(void* ilexer);
+
     // Divide each styling byte into lexical class bits (default: 5) and indicator
     // bits (default: 3). If a lexer requires more than 32 lexical states, then this
     // is used to expand the possible states.
@@ -5420,6 +5523,15 @@ public:
     // Retrieve the number of bits the current lexer needs for styling.
     wxDEPRECATED_MSG( "This method uses a function deprecated in the Scintilla library." )
     int GetStyleBitsNeeded() const;
+
+    // Is drawing done in two phases with backgrounds drawn before foregrounds?
+    wxDEPRECATED_MSG( "This method uses a function deprecated in the Scintilla library." )
+    bool GetTwoPhaseDraw() const;
+
+    // In twoPhaseDraw mode, drawing is performed in two phases, first the background
+    // and then the foreground. This avoids chopping off characters that overlap the next run.
+    wxDEPRECATED_MSG( "This method uses a function deprecated in the Scintilla library." )
+    void SetTwoPhaseDraw(bool twoPhase);
 
     //}}}
     //----------------------------------------------------------------------
@@ -5739,7 +5851,7 @@ public:
         if ( pos == -1 )
             return -1;
 
-        if ( x >= LineLength(y) )
+        if ( x >= LineLength((int)y) )
             return -1;
 
         pos += x;
@@ -5752,7 +5864,7 @@ public:
         if ( l == -1 )
             return false;
 
-        int lx = pos - PositionFromLine(l);
+        long lx = pos - PositionFromLine(l);
         if ( lx >= LineLength(l) )
             return false;
 
@@ -5800,6 +5912,7 @@ public:
 #endif // WXWIN_COMPATIBILITY_3_0
 
     static wxVersionInfo GetLibraryVersionInfo();
+    static wxVersionInfo GetLexerVersionInfo();
 
 protected:
     virtual void DoSetValue(const wxString& value, int flags) override;
@@ -5869,7 +5982,7 @@ public:
 #ifndef SWIG
     wxStyledTextEvent(const wxStyledTextEvent& event);
 #endif
-    ~wxStyledTextEvent() {}
+    ~wxStyledTextEvent() = default;
 
     void SetPosition(int pos)             { m_position = pos; }
     void SetKey(int k)                    { m_key = k; }

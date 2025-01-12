@@ -2,7 +2,6 @@
 // Name:        src/osx/carbon/font.cpp
 // Purpose:     wxFont class
 // Author:      Stefan Csomor
-// Modified by:
 // Created:     1998-01-01
 // Copyright:   (c) Stefan Csomor
 // Licence:     wxWindows licence
@@ -258,10 +257,13 @@ wxFontRefData::wxFontRefData(const wxFontInfo& info)
 {
     m_info.Init();
 
+    wxFontFamily family = info.GetFamily();
+    if (family == wxFONTFAMILY_DEFAULT)
+        family = wxFONTFAMILY_SWISS;
+    SetFamily(family);
+
     if ( info.HasFaceName() )
         SetFaceName(info.GetFaceName());
-    else
-        SetFamily(info.GetFamily());
 
     m_info.SetSizeOrDefault(info.GetFractionalPointSize());
     SetNumericWeight(info.GetNumericWeight());
@@ -346,7 +348,7 @@ void wxFontRefData::Alloc()
         CachedFontEntry& entryNoSize = fontcache[lookupnameNoSize];
         if ( entryNoSize.used )
         {
-            m_ctFont = CTFontCreateCopyWithAttributes(entryNoSize.font, m_info.GetPointSize(), nullptr, nullptr);
+            m_ctFont = CTFontCreateCopyWithAttributes(entryNoSize.font, m_info.GetFractionalPointSize(), nullptr, nullptr);
             m_ctFontAttributes = entryNoSize.fontAttributes.CreateCopy();
             m_ctFontAttributes.SetValue(kCTFontAttributeName,m_ctFont.get());
             m_cgFont = CTFontCopyGraphicsFont(m_ctFont, nullptr);
@@ -363,7 +365,7 @@ void wxFontRefData::Alloc()
             if ( m_info.GetStyle() != wxFONTSTYLE_NORMAL && m_info.GetCTSlant(m_info.GetCTFontDescriptor()) < 0.01 )
                 remainingTransform = &kSlantTransform;
 
-            wxCFRef<CTFontRef> font = CTFontCreateWithFontDescriptor(m_info.GetCTFontDescriptor(), m_info.GetPointSize(), remainingTransform);
+            wxCFRef<CTFontRef> font = CTFontCreateWithFontDescriptor(m_info.GetCTFontDescriptor(), m_info.GetFractionalPointSize(), remainingTransform);
 
             // emulate weigth if necessary
             int difference = m_info.GetNumericWeight() - CTWeightToWX(wxNativeFontInfo::GetCTWeight(font));
@@ -384,8 +386,17 @@ void wxFontRefData::Alloc()
                 }
             }
 
-            m_info = wxNativeFontInfo();
+            // Preserve the fields not represented by CTFont.
+            const bool wasUnderlined = m_info.GetUnderlined();
+            const bool wasStrikethrough = m_info.GetStrikethrough();
+
             m_info.InitFromFont(m_ctFont);
+
+            // Restore them as they were reset by InitFromFont().
+            if ( wasUnderlined )
+                m_info.SetUnderlined(wasUnderlined);
+            if ( wasStrikethrough )
+                m_info.SetStrikethrough(wasStrikethrough);
 
             entryWithSize.font = m_ctFont;
             entryWithSize.cgFont = m_cgFont;
@@ -612,10 +623,6 @@ bool wxFont::Create(int pointSize,
     return true;
 }
 
-wxFont::~wxFont()
-{
-}
-
 void wxFont::DoSetNativeFontInfo(const wxNativeFontInfo& info)
 {
     UnRef();
@@ -718,7 +725,7 @@ wxSize wxFont::GetPixelSize() const
     wxDouble width, height = 0;
     dc->GetTextExtent(wxT("g"), &width, &height, nullptr, nullptr);
     delete dc;
-    return wxSize((int)width, (int)height);
+    return wxSize(wxRound(width), wxRound(height));
 #else
     return wxFontBase::GetPixelSize();
 #endif

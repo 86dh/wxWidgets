@@ -31,6 +31,7 @@ using @ifdef_ and not @if_.
 @itemdef{\__WXGTK210__, GTK+ 2.10 or higher}
 @itemdef{\__WXGTK218__, GTK+ 2.18 or higher}
 @itemdef{\__WXGTK220__, GTK+ 2.20 or higher}
+@itemdef{\__WXGTK3__, GTK+ 3.0 or higher}
 @itemdef{\__WXMAC__, old define, same as <tt>\__WXOSX__</tt>}
 @itemdef{\__WXMOTIF__, Motif (not used any longer).}
 @itemdef{\__WXMOTIF20__, Motif 2.0 or higher (not used any longer).}
@@ -107,10 +108,10 @@ Note that not all of these symbols are always defined, it depends on the
 compiler used.
 
 @beginDefList
-@itemdef{\__ALPHA__, DEC Alpha architecture}
+@itemdef{\__ALPHA__, DEC Alpha architecture (not supported any longer)}
 @itemdef{\__INTEL__, Intel i386 or compatible}
 @itemdef{\__IA64__, Intel 64 bit architecture}
-@itemdef{\__POWERPC__, Motorola Power PC}
+@itemdef{\__POWERPC__, Motorola Power PC (not supported any longer)}
 @endDefList
 
 
@@ -168,6 +169,10 @@ Currently the following symbols exist:
     implemented in a generic way, using a critical section.}
 @itemdef{wxHAS_BITMAPTOGGLEBUTTON, Defined in @c wx/tglbtn.h if
     wxBitmapToggleButton class is available in addition to wxToggleButton.}
+@itemdef{wxHAS_CONFIG_AS_FILECONFIG, Defined if wxConfig is defined as
+    wxFileConfig. This constant is available since wxWidgets 3.3.0.}
+@itemdef{wxHAS_CONFIG_AS_REGCONFIG, Defined if wxConfig is defined as
+    wxRegConfig. This constant is available since wxWidgets 3.3.0.}
 @itemdef{wxHAS_CONFIG_TEMPLATE_RW, Defined if the currently used compiler
     supports template Read() and Write() methods in wxConfig.}
 @itemdef{wxHAS_DEPRECATED_ATTR, Defined if C++14 @c [[deprecated]] attribute is
@@ -189,13 +194,9 @@ Currently the following symbols exist:
 @itemdef{wxHAS_LARGE_FFILES, Defined if wxFFile supports files more than 4GB in
     size (notice that you must include @c wx/filefn.h before testing for this
     symbol).}
-@itemdef{wxHAS_LONG_LONG_T_DIFFERENT_FROM_LONG, Defined if compiler supports a
-    64 bit integer type (available as @c wxLongLong_t) and this type is
-    different from long. Notice that, provided wxUSE_LONGLONG is not turned
-    off, some 64 bit type is always available to wxWidgets programs and this
-    symbol only indicates a presence of such primitive type. It is useful to
-    decide whether some function should be overloaded for both
-    <code>long</code> and <code>long long</code> types.}
+@itemdef{wxHAS_LONG_LONG_T_DIFFERENT_FROM_LONG, Defined if the <code>long
+    long</code> and <code>long</code> types are different. This can be useful
+    to decide whether some function should be overloaded for both types or not.}
 @itemdef{wxHAS_MULTIPLE_FILEDLG_FILTERS, Defined if wxFileDialog supports multiple ('|'-separated) filters.}
 @itemdef{wxHAS_NATIVE_ANIMATIONCTRL, Defined if native wxAnimationCtrl class is being used (this symbol only exists in wxWidgets 3.1.4 and later).}
 @itemdef{wxHAS_NATIVE_DATAVIEWCTRL, Defined if native wxDataViewCtrl class is being used (this symbol only exists in wxWidgets 3.1.4 and later).}
@@ -210,6 +211,10 @@ Currently the following symbols exist:
     Windows resource files</a> resource files are available on the current platform.
     Usually wxHAS_IMAGE_RESOURCES should be used instead.}
 @itemdef{wxHAS_POWER_EVENTS, Defined if wxPowerEvent are ever generated on the current platform.}
+@itemdef{wxHAS_PREMULTIPLIED_ALPHA, Defined if wxBitmap stores raw pixel color
+    values premultiplied (scaled) by alpha. This is generally used to switch
+    whether to premultiply before storing pixels via wxAlphaPixelData converted
+    from a straight alpha source.}
 @itemdef{wxHAS_RADIO_MENU_ITEMS,
         Defined if the current port supports radio menu items (see wxMenu::AppendRadioItem).}
 @itemdef{wxHAS_RAW_BITMAP, Defined if direct access to bitmap data using the classes in @c wx/rawbmp.h is supported.}
@@ -219,6 +224,9 @@ Currently the following symbols exist:
     symbol doesn't need to be tested any more.}
 @itemdef{wxHAS_SVG, Defined if SVG support (currently only via wxBitmapBundle::FromSVG()) is available.}
 @itemdef{wxHAS_TASK_BAR_ICON, Defined if wxTaskBarIcon is available on the current platform.}
+@itemdef{wxHAS_TEXTCTRL_RTF, Defined if wxTextCtrl::SetRTFValue() and
+    wxTextCtrl::GetRTFValue() can be used. This constant, as well as RTF
+    support itself, is available since wxWidgets 3.3.0.}
 @itemdef{wxHAS_WINDOW_LABEL_IN_STATIC_BOX, Defined if wxStaticBox::Create()
     overload taking @c wxWindow* instead of the text label is available on the current platform.}
 @itemdef{wxHAS_MODE_T, Defined when wxWidgets defines @c mode_t typedef for the
@@ -339,12 +347,11 @@ more details.
          with old wxWidgets versions. Changing it is not recommended.}
 @itemdef{wxUSE_UNSAFE_WXSTRING_CONV,
          this option determines if unsafe implicit conversions of wxString to
-         @c char* or @c std::string (depending on whether @c wxUSE_STL is 0 or
-         1) are defined. It is set to 1 by default for compatibility reasons,
-         however it is recommended to set it to 0 for the new projects. See
-         also @c wxNO_UNSAFE_WXSTRING_CONV below for an alternative way of
-         disabling these unsafe conversions not requiring rebuilding the
-         library.}
+         @c char* or @c std::string (depending on whether
+         @c wxUSE_STD_STRING_CONV_IN_WXSTRING is 0 or 1) are defined.
+         It is set to 1 by default for compatibility reasons, but you may set
+         @c wxNO_UNSAFE_WXSTRING_CONV described below to disable these unsafe
+         unsafe conversions without rebuilding the library.}
 @endDefList
 
 @section page_cppconst_miscellaneous Miscellaneous
@@ -400,6 +407,15 @@ more details.
         the applications using the library to disable implicit
         conversions from and to <tt>const char*</tt> in wxString class.
         Support for this option appeared in wxWidgets 3.1.4.}
+@itemdef{wxNO_REQUIRE_LITERAL_MSGIDS,
+        this symbol is not defined by wxWidgets itself, but can be defined by
+        the applications using the library to allow variables as string arguments to
+        translation macros such as _() and wxPLURAL. The default since wxWidgets
+        3.3.0 is to allow only string literals.
+        Note that passing string variables as arguments to translation macros is
+        likely to be a bug, and does not produce the expected results. If you
+        feel you need to define this macro, you should first consider whether
+        your code is doing the right thing.}
 @itemdef{WXMAKINGDLL_XXX,
         used internally and defined when building the
         library @c XXX as a DLL; when a monolithic wxWidgets build is used only a

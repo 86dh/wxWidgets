@@ -2,7 +2,6 @@
 // Name:        src/msw/app.cpp
 // Purpose:     wxApp
 // Author:      Julian Smart
-// Modified by:
 // Created:     04/01/98
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -45,15 +44,18 @@
 #include "wx/filename.h"
 #include "wx/dynlib.h"
 #include "wx/evtloop.h"
+#include "wx/msgdlg.h"
 #include "wx/thread.h"
 #include "wx/platinfo.h"
 #include "wx/scopeguard.h"
+#include "wx/sysopt.h"
 #include "wx/vector.h"
 #include "wx/weakref.h"
 
 #include "wx/msw/private.h"
 #include "wx/msw/dc.h"
 #include "wx/msw/ole/oleutils.h"
+#include "wx/msw/private/darkmode.h"
 #include "wx/msw/private/timer.h"
 
 #if wxUSE_TOOLTIPS
@@ -147,6 +149,7 @@ LRESULT WXDLLEXPORT APIENTRY wxWndProc(HWND, UINT, WPARAM, LPARAM);
 // Module for OLE initialization and cleanup
 // ----------------------------------------------------------------------------
 
+#if wxUSE_OLE
 class wxOleInitModule : public wxModule
 {
 public:
@@ -169,6 +172,7 @@ private:
 };
 
 wxIMPLEMENT_DYNAMIC_CLASS(wxOleInitModule, wxModule);
+#endif //wxUSE_OLE
 
 // ===========================================================================
 // wxGUIAppTraits implementation
@@ -631,7 +635,54 @@ bool wxApp::Initialize(int& argc_, wxChar **argv_)
 
     wxSetKeyboardHook(true);
 
+    // this is useful to allow users to enable dark mode for the applications
+    // not enabling it themselves by setting the corresponding environment
+    // variable
+    if ( const int darkMode = wxSystemOptions::GetOptionInt("msw.dark-mode") )
+    {
+        MSWEnableDarkMode(darkMode > 1 ? DarkMode_Always : DarkMode_Auto);
+    }
+
     callBaseCleanup.Dismiss();
+
+    if ( !wxSystemOptions::GetOptionInt("msw.no-manifest-check") )
+    {
+        if ( GetComCtl32Version() < 610 )
+        {
+            // Check if we have wx resources in this program: this is not
+            // mandatory, but recommended and could be the simplest way to
+            // resolve the problem when not using MSVC.
+            wxString maybeNoResources;
+            if ( !::LoadIcon(wxGetInstance(), wxT("wxICON_AAA")) )
+            {
+                maybeNoResources = " (unless you don't include wx/msw/wx.rc "
+                    "from your resource file intentionally, you should do it "
+                    "and use the manifest defined in it)";
+            }
+
+            wxMessageBox
+            (
+                wxString::Format(R"(WARNING!
+
+This application doesn't use a correct manifest specifying
+the use of Common Controls Library v6%s.
+
+This is deprecated and won't be supported in the future
+wxWidgets versions, however for now you can still set
+"msw.no-manifest-check" system option to 1 (see
+https://docs.wxwidgets.org/latest/classwx_system_options.html
+for how to do it) to skip this check.
+
+Please use the appropriate manifest when building the
+application as described at
+https://docs.wxwidgets.org/latest/plat_msw_install.html#msw_manifest
+or contact us by posting to wx-dev@googlegroups.com
+if you believe not using the manifest should remain supported.
+)", maybeNoResources),
+                "wxWidgets Warning"
+            );
+        }
+    }
 
     return true;
 }
@@ -654,6 +705,15 @@ const wxChar *wxApp::GetRegisteredClassName(const wxChar *name,
             return gs_regClassesInfo[n].GetRequestedName(flags);
     }
 
+    // In dark mode, use the dark background brush instead of specified colour
+    // which would result in light background.
+    HBRUSH hbrBackground;
+    if ( wxMSWDarkMode::IsActive() )
+        hbrBackground = wxMSWDarkMode::GetBackgroundBrush();
+    else
+        hbrBackground = (HBRUSH)wxUIntToPtr(bgBrushCol + 1);
+
+
     // we need to register this class
     WNDCLASS wndclass;
     wxZeroMemory(wndclass);
@@ -661,7 +721,7 @@ const wxChar *wxApp::GetRegisteredClassName(const wxChar *name,
     wndclass.lpfnWndProc   = (WNDPROC)wxWndProc;
     wndclass.hInstance     = wxGetInstance();
     wndclass.hCursor       = ::LoadCursor(nullptr, IDC_ARROW);
-    wndclass.hbrBackground = (HBRUSH)wxUIntToPtr(bgBrushCol + 1);
+    wndclass.hbrBackground = hbrBackground;
     wndclass.style         = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS | extraStyles;
 
 
@@ -758,6 +818,8 @@ void wxApp::CleanUp()
 wxApp::wxApp()
 {
     m_printMode = wxPRINT_WINDOWS;
+
+    WXAppConstructed();
 }
 
 wxApp::~wxApp()
@@ -799,7 +861,12 @@ void wxApp::MSWProcessPendingEventsIfNeeded()
     // both console and GUI applications.
     wxMSWEventLoopBase * const evtLoop =
         static_cast<wxMSWEventLoopBase *>(wxEventLoop::GetActive());
-    if ( evtLoop && evtLoop->MSWIsWakeUpRequested() )
+
+    // We don't want to do anything if we have an event loop which hadn't been
+    // woken up, but we need to do it if we don't have any event loop at all
+    // (which is uncommon but may happen), as otherwise pending events would
+    // just accumulate forever, without ever being processed.
+    if ( !evtLoop || evtLoop->MSWIsWakeUpRequested() )
         ProcessPendingEvents();
 }
 
@@ -813,20 +880,21 @@ void wxApp::OnEndSession(wxCloseEvent& WXUNUSED(event))
     // WM_ENDSESSION handler or when we delete our last window, so make sure we
     // at least execute our cleanup code before
 
-    // prevent the window from being destroyed when the corresponding wxTLW is
-    // destroyed: this will result in a leak of a HWND, of course, but who
-    // cares when the process is being killed anyhow
-    if ( !wxTopLevelWindows.empty() )
-        wxTopLevelWindows[0]->SetHWND(0);
-
     // Destroy all the remaining TLWs before calling OnExit() to have the same
     // sequence of events in this case as in case of the normal shutdown,
     // otherwise we could have many problems due to wxApp being already
     // destroyed when window cleanup code (in close event handlers or dtor) is
     // executed.
+    //
+    // Note that we survive after this call only because we don't delete any
+    // windows at MSW level, see gs_gotEndSession check in wxWindow dtor.
     DeleteAllTLWs();
 
     const int rc = OnExit();
+
+    // Skip unregistering windows classes: this is not really necessary and
+    // would result in an error because we may still have an open window.
+    gs_regClassesInfo.clear();
 
     wxEntryCleanup();
 
@@ -840,10 +908,20 @@ void wxApp::OnEndSession(wxCloseEvent& WXUNUSED(event))
 // user can veto the close, and therefore the end session.
 void wxApp::OnQueryEndSession(wxCloseEvent& event)
 {
-    if (GetTopWindow())
+    // Make a copy to avoid problems due to iterator invalidation if any
+    // windows get destroyed (rather than just closed) during the loop.
+    const auto tlws = wxTopLevelWindows;
+    for ( auto* tlw : tlws )
     {
-        if (!GetTopWindow()->Close(!event.CanVeto()))
-            event.Veto(true);
+        // If it's not in the list any more it could have been destroyed.
+        if ( !wxTopLevelWindows.Member(tlw) )
+            continue;
+
+        if ( !tlw->Close(!event.CanVeto()) )
+        {
+            event.Veto();
+            return;
+        }
     }
 }
 

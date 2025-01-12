@@ -2,7 +2,6 @@
 // Name:        src/common/pickerbase.cpp
 // Purpose:     wxPickerBase class implementation
 // Author:      Francesco Montorsi
-// Modified by:
 // Created:     15/04/2006
 // Copyright:   (c) Francesco Montorsi
 // Licence:     wxWindows licence
@@ -90,7 +89,6 @@ bool wxPickerBase::CreateBase(wxWindow *parent,
 
         m_text->Bind(wxEVT_TEXT, &wxPickerBase::OnTextCtrlUpdate, this);
         m_text->Bind(wxEVT_KILL_FOCUS, &wxPickerBase::OnTextCtrlKillFocus, this);
-        m_text->Bind(wxEVT_DESTROY, &wxPickerBase::OnTextCtrlDelete, this);
 
         m_sizer->Add(m_text,
                      wxSizerFlags(1).CentreVertical().Border(wxRIGHT));
@@ -178,12 +176,6 @@ void wxPickerBase::OnTextCtrlKillFocus(wxFocusEvent& event)
     // don't leave the textctrl empty
     if (m_text && m_text->GetValue().empty())
         UpdateTextCtrlFromPicker();
-}
-
-void wxPickerBase::OnTextCtrlDelete(wxWindowDestroyEvent &)
-{
-    // the textctrl has been deleted; our pointer is invalid!
-    m_text = nullptr;
 }
 
 void wxPickerBase::OnTextCtrlUpdate(wxCommandEvent &)

@@ -28,6 +28,7 @@
 #include "wx/protocol/http.h"
 #include "wx/sckstrm.h"
 #include "wx/thread.h"
+#include "wx/wxcrt.h"
 
 
 // ----------------------------------------------------------------------------
@@ -227,12 +228,11 @@ wxHTTP::SetPostText(const wxString& contentType,
 
 void wxHTTP::SendHeaders()
 {
-    typedef wxStringToStringHashMap::iterator iterator;
     wxString buf;
 
-    for (iterator it = m_headers.begin(), en = m_headers.end(); it != en; ++it )
+    for ( const auto& kv : m_headers )
     {
-        buf.Printf(wxT("%s: %s\r\n"), it->first.c_str(), it->second.c_str());
+        buf.Printf("%s: %s\r\n", kv.first, kv.second);
 
         const wxWX2MBbuf cbuf = buf.mb_str();
         Write(cbuf, strlen(cbuf));
@@ -242,7 +242,6 @@ void wxHTTP::SendHeaders()
 bool wxHTTP::ParseHeaders()
 {
     wxString line;
-    wxStringTokenizer tokenzr;
 
     ClearHeaders();
     ClearCookies();
@@ -480,8 +479,6 @@ size_t wxHTTPStream::OnSysRead(void *buffer, size_t bufsize)
 wxInputStream *wxHTTP::GetInputStream(const wxString& path)
 {
     wxHTTPStream *inp_stream;
-
-    wxString new_path;
 
     m_lastError = wxPROTO_CONNERR;  // all following returns share this type of error
     if (!m_addr)

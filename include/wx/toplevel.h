@@ -3,7 +3,6 @@
 // Purpose:     declares wxTopLevelWindow class, the base class for all
 //              top level windows (such as frames and dialogs)
 // Author:      Vadim Zeitlin, Vaclav Slavik
-// Modified by:
 // Created:     06.08.01
 // Copyright:   (c) 2001 Vadim Zeitlin <zeitlin@dptmaths.ens-cachan.fr>
 //                       Vaclav Slavik <vaclav@wxwidgets.org>
@@ -255,7 +254,7 @@ public:
     class GeometrySerializer
     {
     public:
-        virtual ~GeometrySerializer() {}
+        virtual ~GeometrySerializer() = default;
 
         // If saving a field returns false, it's fatal error and SaveGeometry()
         // will return false.
@@ -325,6 +324,8 @@ protected:
         DoGetPosition(x, y);
     }
 
+    virtual wxSize DoGetBestClientSize() const override;
+
     // test whether this window makes part of the frame
     // (menubar, toolbar and statusbar are excluded from automatic layout)
     virtual bool IsOneOfBars(const wxWindow *WXUNUSED(win)) const
@@ -353,6 +354,14 @@ protected:
     wxWindowRef m_winTmpDefault;
 
     bool m_modified;
+
+private:
+    // Return true if this window uses some automatic layout mechanism.
+    bool UsesAutoLayout() const;
+
+    // Return the only child of this window if it has exactly one or null
+    // pointer otherwise.
+    wxWindow* GetUniqueChild() const;
 
     wxDECLARE_NO_COPY_CLASS(wxTopLevelWindowBase);
     wxDECLARE_EVENT_TABLE();
@@ -387,7 +396,7 @@ protected:
     {
     public:
         // construction
-        wxTopLevelWindow() { }
+        wxTopLevelWindow() = default;
         wxTopLevelWindow(wxWindow *parent,
                    wxWindowID winid,
                    const wxString& title,

@@ -2,7 +2,6 @@
 // Name:        src/common/filename.cpp
 // Purpose:     wxFileName - encapsulates a file path
 // Author:      Robert Roebling, Vadim Zeitlin
-// Modified by:
 // Created:     28.12.2000
 // Copyright:   (c) 2000 Robert Roebling
 // Licence:     wxWindows licence
@@ -126,9 +125,7 @@
     #define S_ISDIR(mode) ((mode) & S_IFDIR)
 #endif
 
-#if wxUSE_LONGLONG
 extern const wxULongLong wxInvalidSize = (unsigned)-1;
-#endif // wxUSE_LONGLONG
 
 namespace
 {
@@ -2885,8 +2882,6 @@ bool wxFileName::GetTimes(wxDateTime *dtAccess,
 // file size functions
 // ----------------------------------------------------------------------------
 
-#if wxUSE_LONGLONG
-
 /* static */
 wxULongLong wxFileName::GetSize(const wxString &filename)
 {
@@ -2976,6 +2971,3 @@ wxString wxFileName::GetHumanReadableSize(const wxString& failmsg,
 {
     return GetHumanReadableSize(GetSize(), failmsg, precision, conv);
 }
-
-#endif // wxUSE_LONGLONG
-

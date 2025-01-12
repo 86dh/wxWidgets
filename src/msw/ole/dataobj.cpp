@@ -2,7 +2,6 @@
 // Name:        src/msw/ole/dataobj.cpp
 // Purpose:     implementation of wx[I]DataObject class
 // Author:      Vadim Zeitlin
-// Modified by:
 // Created:     10.05.98
 // Copyright:   (c) 1998 Vadim Zeitlin <zeitlin@dptmaths.ens-cachan.fr>
 // Licence:     wxWindows licence
@@ -23,6 +22,7 @@
 #if wxUSE_DATAOBJ
 
 #ifndef WX_PRECOMP
+    #include "wx/dcmemory.h"
     #include "wx/intl.h"
     #include "wx/log.h"
     #include "wx/utils.h"
@@ -719,10 +719,11 @@ STDMETHODIMP wxIDataObject::SetData(FORMATETC *pformatetc,
                     case wxDF_HTML:
                     case CF_TEXT:
                     case CF_OEMTEXT:
-                        size = strlen((const char *)ptr.Get());
+                        // Size must include the trailing NUL.
+                        size = strlen((const char *)ptr.Get()) + 1;
                         break;
                     case CF_UNICODETEXT:
-                        size = wxWcslen((const wchar_t *)ptr.Get()) * sizeof(wchar_t);
+                        size = (wxWcslen((const wchar_t *)ptr.Get()) + 1) * sizeof(wchar_t);
                         break;
                     case CF_BITMAP:
                     case CF_HDROP:
@@ -1041,10 +1042,42 @@ const wxChar *wxDataObject::GetFormatName(wxDataFormat format)
 // wxBitmapDataObject supports CF_DIB format
 // ----------------------------------------------------------------------------
 
+namespace
+{
+
+// Modify bitmap if necessary, i.e. if it uses 0RGB format in which alpha
+// channel is present but is entirely 0, to make it just plain RGB, i.e.
+// without alpha channel at all, to ensure compatibility with the applications
+// not recognizing the special case of 0RGB and handling such bitmaps as
+// completely transparent, see #17640.
+void RemoveAlphaIfNecessary(wxBitmap& bmp)
+{
+    // Replace 0RGB bitmap with its RGB copy to ensure compatibility with
+    // applications not recognizing bitmaps in 0RGB format, see #17640.
+    if ( bmp.GetDepth() == 32 && !bmp.HasAlpha() )
+    {
+        wxBitmap bmpRGB(bmp.GetSize(), 24);
+        {
+            wxMemoryDC dc(bmpRGB);
+            dc.DrawBitmap(bmp, 0, 0);
+        }
+
+        bmp = bmpRGB;
+    }
+}
+
+} // anonymous namespace
+
 size_t wxBitmapDataObject::GetDataSize() const
 {
 #if wxUSE_WXDIB
-    return wxDIB::ConvertFromBitmap(nullptr, GetHbitmapOf(GetBitmap()));
+    wxBitmap& bmp = const_cast<wxBitmapDataObject*>(this)->m_bitmap;
+
+    // Note that we need to do this here too and not just in GetDataHere()
+    // because the size of the bitmap without the alpha channel is different.
+    RemoveAlphaIfNecessary(bmp);
+
+    return wxDIB::ConvertFromBitmap(nullptr, GetHbitmapOf(bmp));
 #else
     return 0;
 #endif
@@ -1053,9 +1086,13 @@ size_t wxBitmapDataObject::GetDataSize() const
 bool wxBitmapDataObject::GetDataHere(void *buf) const
 {
 #if wxUSE_WXDIB
+    wxBitmap& bmp = const_cast<wxBitmapDataObject*>(this)->m_bitmap;
+
+    RemoveAlphaIfNecessary(bmp);
+
     BITMAPINFO * const pbi = (BITMAPINFO *)buf;
 
-    return wxDIB::ConvertFromBitmap(pbi, GetHbitmapOf(GetBitmap())) != 0;
+    return wxDIB::ConvertFromBitmap(pbi, GetHbitmapOf(bmp)) != 0;
 #else
     wxUnusedVar(buf);
     return false;
@@ -1476,7 +1513,7 @@ void wxURLDataObject::SetURL(const wxString& url)
         SetData(wxDataFormat(CFSTR_SHELLURL), len + 1, urlMB);
     }
 
-    SetData(wxDF_UNICODETEXT, url.length()*sizeof(wxChar), url.wc_str());
+    SetData(wxDF_UNICODETEXT, (url.length() + 1)*sizeof(wxChar), url.wc_str());
 }
 
 #if wxUSE_OLE

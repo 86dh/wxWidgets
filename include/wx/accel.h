@@ -2,7 +2,6 @@
 // Name:        wx/accel.h
 // Purpose:     wxAcceleratorEntry and wxAcceleratorTable classes
 // Author:      Julian Smart, Robert Roebling, Vadim Zeitlin
-// Modified by:
 // Created:     31.05.01 (extracted from other files)
 // Copyright:   (c) wxWidgets team
 // Licence:     wxWindows licence
@@ -16,6 +15,7 @@
 #if wxUSE_ACCEL
 
 #include "wx/object.h"
+#include "wx/string.h"
 
 class WXDLLIMPEXP_FWD_CORE wxAcceleratorTable;
 class WXDLLIMPEXP_FWD_CORE wxMenuItem;

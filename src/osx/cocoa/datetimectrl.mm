@@ -23,9 +23,12 @@
 
 #include "wx/datetimectrl.h"
 #include "wx/datectrl.h"
+#include "wx/uilocale.h"
 
 #include "wx/osx/core/private/datetimectrl.h"
 #include "wx/osx/cocoa/private/date.h"
+#include "wx/osx/private/available.h"
+#include "wx/osx/private/uilocale.h"
 
 using namespace wxOSXImpl;
 
@@ -164,7 +167,7 @@ wxDateTimeWidgetImpl::CreateDateTimePicker(wxDateTimePickerCtrl* wxpeer,
                                            const wxDateTime& dt,
                                            const wxPoint& pos,
                                            const wxSize& size,
-                                           long WXUNUSED(style),
+                                           long style,
                                            wxDateTimeWidgetKind kind)
 {
     NSRect r = wxOSXGetFrameForControl(wxpeer, pos, size);
@@ -186,6 +189,27 @@ wxDateTimeWidgetImpl::CreateDateTimePicker(wxDateTimePickerCtrl* wxpeer,
     [v setDatePickerElements: elements];
 
     [v setDatePickerStyle: NSTextFieldAndStepperDatePickerStyle];
+
+#if wxUSE_INTL
+    if ( wxUILocale::GetCurrent().IsSupported() )
+    {
+        NSLocale* nsloc = wxGetCurrentNSLocale();
+        if (nsloc)
+        {
+            [v setLocale: nsloc];
+        }
+    }
+#endif
+
+    if ( style & wxDP_DROPDOWN )
+    {
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101504
+        if ( WX_IS_MACOS_AVAILABLE_FULL(10, 15, 4) )
+        {
+            v.presentsCalendarOverlay = YES;
+        }
+#endif
+    }
 
     // Avoid a disabled looking transparent background for the text cells.
     [v setDrawsBackground: YES];

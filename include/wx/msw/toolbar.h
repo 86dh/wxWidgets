@@ -2,7 +2,6 @@
 // Name:        wx/msw/toolbar.h
 // Purpose:     wxToolBar class
 // Author:      Julian Smart
-// Modified by:
 // Created:     01/02/97
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -100,6 +99,9 @@ public:
 protected:
     // common part of all ctors
     void Init();
+
+    virtual bool MSWGetDarkModeSupport(MSWDarkModeSupport& support) const override;
+    virtual int MSWGetToolTipMessage() const override;
 
     // create the native toolbar control
     bool MSWCreateToolbar(const wxPoint& pos, const wxSize& size);

@@ -2,7 +2,6 @@
 // Name:        wx/msw/radiobut.h
 // Purpose:     wxRadioButton class
 // Author:      Julian Smart
-// Modified by:
 // Created:     01/02/97
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -57,6 +56,8 @@ public:
 protected:
     virtual wxBorder GetDefaultBorder() const override { return wxBORDER_NONE; }
     virtual wxSize DoGetBestSize() const override;
+
+    virtual bool MSWGetDarkModeSupport(MSWDarkModeSupport& support) const override;
 
     // Implement wxMSWOwnerDrawnButtonBase methods.
     virtual int MSWGetButtonStyle() const override;

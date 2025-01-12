@@ -111,7 +111,14 @@ enum
     /**
         Enable all supported gesture events.
      */
-    wxTOUCH_ALL_GESTURES
+    wxTOUCH_ALL_GESTURES,
+
+    /**
+        Enable raw multitouch events.
+
+        @since 3.3.0
+     */
+    wxTOUCH_RAW_EVENTS
 };
 
 /**
@@ -591,6 +598,30 @@ public:
             Child window to add.
     */
     virtual void AddChild(wxWindow* child);
+
+    /**
+        Invoke the given functor for all children of the given window
+        recursively.
+
+        This function calls @a functor for the window itself and then for all
+        of its children, recursively.
+
+        Example of using it for implementing a not very smart translation
+        function:
+        @code
+        void MyFrame::OnTranslate(wxCommandEvent&) {
+            CallForEachChild([](wxWindow* win) {
+                wxString rest;
+                if ( win->GetLabel().StartsWith("Hello ", &rest) )
+                    win->SetLabel("Bonjour " + rest);
+            });
+        }
+        @endcode
+
+        @since 3.3.0
+     */
+    template <typename T>
+    void CallForEachChild(const T& functor);
 
     /**
         Destroys all children of a window. Called automatically by the destructor.
@@ -2396,12 +2427,12 @@ public:
         problem.
 
 
-        Under wxGTK and wxOSX, you can use ::wxBG_STYLE_TRANSPARENT to obtain
+        Under wxGTK, wxOSX and wxMSW, you can use ::wxBG_STYLE_TRANSPARENT to obtain
         full transparency of the window background. Note that wxGTK supports
         this only since GTK 2.12 with a compositing manager enabled, call
         IsTransparentBackgroundSupported() to check whether this is the case,
         see the example of doing it in @ref page_samples_shaped "the shaped
-        sample".
+        sample". Under wxMSW this is supported since 3.3.0.
 
         Also, in order for @c SetBackgroundStyle(wxBG_STYLE_TRANSPARENT) to
         work, it must be called before Create(). If you're using your own
@@ -3375,6 +3406,13 @@ public:
     /**
         Sets the window's label.
 
+        Please note that not all windows have labels and this function may do
+        nothing in this case. And some other derived windows use different
+        functions for changing the text shown in them, e.g. wxTextCtrl uses
+        wxTextCtrl::SetValue() or wxTextCtrl::ChangeValue() and trying to use
+        SetLabel() on it will assert to help to detect possibly erroneous calls
+        to SetLabel().
+
         @param label
             The window label.
 
@@ -3437,6 +3475,17 @@ public:
         See also wxAccessible.
     */
     void SetAccessible(wxAccessible* accessible);
+
+    /**
+        Override to create a specific accessible object.
+    */
+    virtual wxAccessible* CreateAccessible();
+
+    /**
+        Returns the accessible object, calling CreateAccessible if necessary.
+        May return @NULL, in which case system-provide accessible is used.
+    */
+    wxAccessible* GetOrCreateAccessible();
 
     ///@}
 
@@ -3749,6 +3798,9 @@ public:
               applications (and probably avoid using it under the other
               platforms without good reason as well).
 
+        @note This function does nothing when using wxGTK with Wayland because
+              Wayland intentionally doesn't provide the required functionality.
+
         @param x
             The new x position for the cursor.
         @param y
@@ -3850,6 +3902,38 @@ public:
         @endWxPerlOnly
     */
     virtual WXWidget GetHandle() const;
+
+    /**
+        This function is used only with wxGTK when running on Windows, to
+        receive a wxWindow's underlying HWND.
+
+        Whereas GetHandle() returns a port-specific handle (a GtkWidget on
+        wxGTK), this function returns the handle which underlies the GtkWidget
+        itself.
+
+        If you do need to use it, please note that this function doesn't exist
+        anywhere besides wxGTK on Windows, and so any code using it must be
+        conditionally guarded against using, for example:
+        @code
+        #if defined(__WINDOWS__) && defined(__WXGTK__)
+        ... code that uses GTKGetWin32Handle() ...
+        #endif
+        @endcode
+
+        Note that this function will return nullptr if the Window has not yet
+        been initialized ("realized" in GTK terms) or is otherwise invalid.
+
+        A Window is generally realized once it has been shown, and code which
+        needs to run as soon as the Window is realized should hook wxWindowCreateEvent
+        to do so.
+
+        @return HWND if the Window is valid, nullptr otherwise.
+
+        @see wxWindowCreateEvent
+
+        @since 3.3.0
+     */
+    WXHWND GTKGetWin32Handle() const;
 
     /**
         This method should be overridden to return @true if this window has
@@ -4028,6 +4112,22 @@ public:
         @see wxUpdateUIEvent, DoUpdateWindowUI(), OnInternalIdle()
     */
     virtual void UpdateWindowUI(long flags = wxUPDATE_UI_NONE);
+
+    /**
+        When UpdateWindowUI() runs, it creates instances of
+        wxUpdateUIEvent.  Those instances may vary depending on the
+        window that the wxUpdateUIEvent will control.  For example, a
+        wxCheckBox with wxCHK_3STATE should enable
+        wxUpdateUIEvent::Is3State(), but most other windows should not.
+        This function can be overridden to perform the
+        window-specific initializations, such as enabling setting the
+        checkable state.
+
+        @see wxUpdateUIEvent, UpdateWindowUI()
+
+        @since 3.3.0
+    */
+    virtual void DoPrepareUpdateWindowUI(wxUpdateUIEvent& event) const;
 
     ///@}
 

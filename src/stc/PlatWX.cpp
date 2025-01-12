@@ -30,7 +30,6 @@
 #include "wx/vlbox.h"
 #include "wx/sizer.h"
 #include "wx/renderer.h"
-#include "wx/hashset.h"
 #include "wx/dcclient.h"
 #include "wx/wupdlock.h"
 
@@ -41,6 +40,9 @@
 #include "wx/dcgraph.h"
 #include "wx/graphics.h"
 #endif
+
+#include <memory>
+#include <unordered_map>
 
 #include "PlatWX.h"
 #include "wx/stc/stc.h"
@@ -228,6 +230,8 @@ public:
     virtual void Ellipse(PRectangle rc, ColourDesired fore, ColourDesired back) override;
     virtual void Copy(PRectangle rc, Point from, Surface &surfaceSource) override;
 
+    virtual std::unique_ptr<IScreenLineLayout> Layout(const IScreenLine* screenLine) override;
+
     virtual void DrawTextNoClip(PRectangle rc, Font &font_, XYPOSITION ybase, const char *s, int len, ColourDesired fore, ColourDesired back) override;
     virtual void DrawTextClipped(PRectangle rc, Font &font_, XYPOSITION ybase, const char *s, int len, ColourDesired fore, ColourDesired back) override;
     virtual void DrawTextTransparent(PRectangle rc, Font &font_, XYPOSITION ybase, const char *s, int len, ColourDesired fore) override;
@@ -244,6 +248,7 @@ public:
 
     virtual void SetUnicodeMode(bool unicodeMode_) override;
     virtual void SetDBCSMode(int codePage) override;
+    virtual void SetBidiR2L(bool bidiR2L_) override;
 
     void BrushColour(ColourDesired back);
     void SetFont(Font &font_);
@@ -287,8 +292,8 @@ void SurfaceImpl::InitPixMap(int width, int height, Surface *surface, WindowID w
     hdcOwned = true;
     if (width < 1) width = 1;
     if (height < 1) height = 1;
-    bitmap = new wxBitmap(GETWIN(winid)->ToPhys(wxSize(width, height)));
-    bitmap->SetScaleFactor(GETWIN(winid)->GetDPIScaleFactor());
+    bitmap = new wxBitmap();
+    bitmap->CreateWithLogicalSize(width, height, GETWIN(winid)->GetDPIScaleFactor());
     mdc->SelectObject(*bitmap);
 }
 
@@ -387,7 +392,7 @@ void SurfaceImpl::RoundedRectangle(PRectangle rc, ColourDesired fore, ColourDesi
     hdc->DrawRoundedRectangle(wxRectFromPRectangle(rc), 4);
 }
 
-#if defined(__WXMSW__) || defined(__WXMAC__)
+#ifdef wxHAS_PREMULTIPLIED_ALPHA
 #define wxPy_premultiply(p, a)   ((p) * (a) / 0xff)
 #else
 #define wxPy_premultiply(p, a)   (p)
@@ -607,6 +612,11 @@ void SurfaceImpl::Copy(PRectangle rc, Point from, Surface &surfaceSource) {
               wxRound(from.x), wxRound(from.y), wxCOPY);
 }
 
+std::unique_ptr<IScreenLineLayout> SurfaceImpl::Layout(const IScreenLine* WXUNUSED(screenLine))
+{
+    return {};
+}
+
 void SurfaceImpl::DrawTextNoClip(PRectangle rc, Font &font, XYPOSITION ybase,
                                  const char *s, int len,
                                  ColourDesired fore, ColourDesired back) {
@@ -743,6 +753,10 @@ void SurfaceImpl::SetUnicodeMode(bool unicodeMode_) {
 
 void SurfaceImpl::SetDBCSMode(int WXUNUSED(codePage)) {
     // dbcsMode = codePage == SC_CP_DBCS;
+}
+
+void SurfaceImpl::SetBidiR2L(bool WXUNUSED(bidiR2L_))
+{
 }
 
 } // namespace scintilla
@@ -988,6 +1002,8 @@ public:
                          ColourDesired back) override;
     virtual void Copy(PRectangle rc, Point from, Surface &surfaceSource) override;
 
+    virtual std::unique_ptr<IScreenLineLayout> Layout(const IScreenLine* screenLine) override;
+
     virtual void DrawTextNoClip(PRectangle rc, Font &font_, XYPOSITION ybase,
                                 const char *s, int len, ColourDesired fore,
                                 ColourDesired back) override;
@@ -1011,6 +1027,7 @@ public:
 
     virtual void SetUnicodeMode(bool unicodeMode_) override;
     virtual void SetDBCSMode(int codePage) override;
+    virtual void SetBidiR2L(bool bidiR2L_) override;
 
     // helpers
     void SetFont(Font &font_);
@@ -1550,6 +1567,11 @@ void SurfaceD2D::Copy(PRectangle rc, Point from, Surface& surfaceSource)
     }
 }
 
+std::unique_ptr<IScreenLineLayout> SurfaceD2D::Layout(const IScreenLine* WXUNUSED(screenLine))
+{
+    return {};
+}
+
 void SurfaceD2D::DrawTextNoClip(PRectangle rc, Font &font_, XYPOSITION ybase,
                                 const char *s, int len, ColourDesired fore,
                                 ColourDesired back)
@@ -1764,6 +1786,10 @@ void SurfaceD2D::SetDBCSMode(int WXUNUSED(codePage_))
 {
 }
 
+void SurfaceD2D::SetBidiR2L(bool WXUNUSED(bidiR2L_))
+{
+}
+
 void SurfaceD2D::SetFont(Font &font_)
 {
     FontID id = font_.GetID();
@@ -1819,9 +1845,9 @@ void SurfaceD2D::D2DPenColour(ColourDesired fore, int alpha)
     wxCHECK( Initialised(), void() );
 
     D2D_COLOR_F col;
-    col.r = (fore.AsInteger() & 0xff) / 255.0f;
-    col.g = ((fore.AsInteger() & 0xff00) >> 8) / 255.0f;
-    col.b = (fore.AsInteger() >> 16) / 255.0f;
+    col.r = fore.GetRed() / 255.0f;
+    col.g = fore.GetGreen() / 255.0f;
+    col.b = fore.GetBlue() / 255.0f;
     col.a = alpha / 255.0f;
     if ( m_pSolidBrush.get() )
     {
@@ -2382,7 +2408,7 @@ public:
     const wxColour& GetCurrentTextColour() const;
 
 private:
-    WX_DECLARE_HASH_MAP(int, wxBitmap, wxIntegerHash, wxIntegerEqual, ImgList);
+    using ImgList = std::unordered_map<int, wxBitmap>;
 
     int      m_desiredVisibleRows;
     ImgList  m_imgList;
@@ -3398,41 +3424,6 @@ void Menu::Destroy() {
 void Menu::Show(Point pt, Window &w) {
     GETWIN(w.GetID())->PopupMenu((wxMenu*)mid, wxRound(pt.x - 4), wxRound(pt.y));
     Destroy();
-}
-
-//----------------------------------------------------------------------
-
-class DynamicLibraryImpl : public DynamicLibrary {
-public:
-    explicit DynamicLibraryImpl(const char *modulePath)
-        : m_dynlib(wxString::FromUTF8(modulePath), wxDL_LAZY) {
-    }
-
-    // Use GetSymbol to get a pointer to the relevant function.
-    virtual Function FindFunction(const char *name) override {
-        if (m_dynlib.IsLoaded()) {
-            bool status;
-            void* fn_address = m_dynlib.GetSymbol(wxString::FromUTF8(name),
-                                                  &status);
-            if(status)
-                return fn_address;
-            else
-                return nullptr;
-        }
-        else
-            return nullptr;
-    }
-
-    virtual bool IsValid() override {
-        return m_dynlib.IsLoaded();
-    }
-
-private:
-    wxDynamicLibrary m_dynlib;
-};
-
-DynamicLibrary *DynamicLibrary::Load(const char *modulePath) {
-    return static_cast<DynamicLibrary *>( new DynamicLibraryImpl(modulePath) );
 }
 
 //----------------------------------------------------------------------

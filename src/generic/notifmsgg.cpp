@@ -265,6 +265,8 @@ void wxNotificationMessageWindow::Set(int timeout)
 void wxNotificationMessageWindow::OnClose(wxCloseEvent& WXUNUSED(event))
 {
     wxCommandEvent evt(wxEVT_NOTIFICATION_MESSAGE_DISMISSED);
+    evt.SetInt(static_cast<int>(wxNotificationMessage::DismissalReason::ByApp));
+
     m_notificationImpl->ProcessNotificationEvent(evt);
 
     if ( m_timer.IsRunning() )
@@ -307,6 +309,7 @@ void wxNotificationMessageWindow::OnNotificationMouseLeave(wxMouseEvent& WXUNUSE
 void wxNotificationMessageWindow::OnCloseClicked(wxCommandEvent& WXUNUSED(event))
 {
     wxCommandEvent evt(wxEVT_NOTIFICATION_MESSAGE_DISMISSED);
+    evt.SetInt(static_cast<int>(wxNotificationMessage::DismissalReason::ByUser));
     m_notificationImpl->ProcessNotificationEvent(evt);
 
     m_notificationImpl->Close();
@@ -470,7 +473,6 @@ bool wxGenericNotificationMessageImpl::Show(int timeout)
         timeout = GetDefaultTimeout();
     }
 
-    SetActive(true);
     m_window->Set(timeout);
 
     m_window->ShowWithEffect(wxSHOW_EFFECT_BLEND);
@@ -484,8 +486,6 @@ bool wxGenericNotificationMessageImpl::Close()
         return false;
 
     m_window->Hide();
-
-    SetActive(false);
 
     return true;
 }

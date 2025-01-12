@@ -17,7 +17,8 @@ from fileinput import FileInput
 sys.dont_write_bytecode = True
 from gen_docs import categoriesList,buildDocs
 
-IFACE         = os.path.abspath('./scintilla/include/Scintilla.iface')
+IFACE1        = os.path.abspath('./scintilla/include/Scintilla.iface')
+IFACE2        = os.path.abspath('./lexilla/include/LexicalStyles.iface')
 HDR_SCN       = os.path.abspath('./scintilla/include/Scintilla.h')
 H_TEMPLATE    = os.path.abspath('./stc.h.in')
 IH_TEMPLATE   = os.path.abspath('./stc.interface.h.in')
@@ -25,6 +26,8 @@ CPP_TEMPLATE  = os.path.abspath('./stc.cpp.in')
 H_DEST        = os.path.abspath('../../include/wx/stc/stc.h')
 IH_DEST       = os.path.abspath('../../interface/wx/stc/stc.h')
 CPP_DEST      = os.path.abspath('./stc.cpp')
+SCINTILLA_VER = os.path.abspath('./scintilla/version.txt')
+LEXILLA_VER   = os.path.abspath('./lexilla/version.txt')
 if len(sys.argv) > 1 and sys.argv[1] == '--wxpython':
     DOCSTR_DEST   = os.path.abspath('../../../wxPython/src/_stc_gendocs.i')
 else:
@@ -1177,6 +1180,13 @@ methodOverrideMap = {
          return stc2wx(buf);'''
     ),
 
+    'SetILexer' :
+    (0,
+     'void %s(void* ilexer);',
+     '''void %s(void* ilexer) {
+         SendMsg(%s, 0, (sptr_t)ilexer);'''
+    ),
+
     '' : ('', 0, 0),
 
     }
@@ -1220,8 +1230,7 @@ def processIface(iface, h_tmplt, cpp_tmplt, ih_tmplt, h_dest, cpp_dest, docstr_d
     icat = 'Basics'
 
     # parse iface file
-    fi = FileInput(iface)
-    for line in fi:
+    for line in iface:
         line = line[:-1]
         if line[:2] == '##' or line == '':
             #curDocStrings = []
@@ -1276,6 +1285,7 @@ def processIface(iface, h_tmplt, cpp_tmplt, ih_tmplt, h_dest, cpp_dest, docstr_d
     data['METHOD_DEFS'] = defs
     data['METHOD_IDEFS'] = idefs
     data['METHOD_IMPS'] = imps
+    data['VERSION_INFO'] = processVersions()
     data['TABLE_OF_CONTENTS'] = tableitems
 
     # get template text
@@ -1551,10 +1561,10 @@ def parseVal(line, values, docs, icat):
 #----------------------------------------------------------------------------
 
 funregex = re.compile(r'\s*([a-zA-Z0-9_]+)'  # <ws>return type
-                      '\s+([a-zA-Z0-9_]+)='  # <ws>name=
-                      '([0-9]+)'             # number
-                      '\(([ a-zA-Z0-9_]*),'  # (param,
-                      '([ a-zA-Z0-9_]*),*\)')  # param)
+                      r'\s+([a-zA-Z0-9_]+)='  # <ws>name=
+                      r'([0-9]+)'             # number
+                      r'\(([ a-zA-Z0-9_]*),'  # (param,
+                      r'([ a-zA-Z0-9_]*),*\)')  # param)
 
 def parseFun(line, methods, docs, values, is_const, msgcodes, icat):
     def parseParam(param):
@@ -1594,6 +1604,26 @@ def parseFun(line, methods, docs, values, is_const, msgcodes, icat):
                      is_const or name in constNonGetterMethods,
                      name in overrideNeeded, icat) )
 
+#----------------------------------------------------------------------------
+
+def processVersions():
+    scintillaFile = open(SCINTILLA_VER, "r")
+    sVer = scintillaFile.read()
+    lexillaFile = open(LEXILLA_VER, "r")
+    lVer = lexillaFile.read()
+
+    return """
+/*static*/ wxVersionInfo wxStyledTextCtrl::GetLibraryVersionInfo()
+{{
+    return wxVersionInfo("Scintilla", {0}, {1}, {2}, "Scintilla {0}.{1}.{2}");
+}}
+
+/*static*/ wxVersionInfo wxStyledTextCtrl::GetLexerVersionInfo()
+{{
+    return wxVersionInfo("Lexilla", {3}, {4}, {5}, "Lexilla {3}.{4}.{5}");
+}}
+""".format(sVer[0], sVer[1], sVer[2], lVer[0], lVer[1], lVer[2])
+
 
 #----------------------------------------------------------------------------
 
@@ -1601,7 +1631,7 @@ def parseFun(line, methods, docs, values, is_const, msgcodes, icat):
 def main(args):
     # TODO: parse command line args to replace default input/output files???
 
-    if not os.path.exists(IFACE):
+    if not os.path.exists(IFACE1):
         print('Please run this script from src/stc subdirectory.')
         sys.exit(1)
 
@@ -1609,8 +1639,12 @@ def main(args):
     msgcodes = {}
     processHeader(HDR_SCN, msgcodes)
 
+    i1_lines = open(IFACE1).readlines()
+    i2_lines = open(IFACE2).readlines()
+    iface = i1_lines + i2_lines
+
     # Now just do it
-    processIface(IFACE, H_TEMPLATE, CPP_TEMPLATE, IH_TEMPLATE, H_DEST, CPP_DEST, DOCSTR_DEST, IH_DEST, msgcodes)
+    processIface(iface, H_TEMPLATE, CPP_TEMPLATE, IH_TEMPLATE, H_DEST, CPP_DEST, DOCSTR_DEST, IH_DEST, msgcodes)
 
 
 

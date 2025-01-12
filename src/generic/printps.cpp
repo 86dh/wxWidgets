@@ -2,7 +2,6 @@
 // Name:        src/generic/printps.cpp
 // Purpose:     Postscript print/preview framework
 // Author:      Julian Smart
-// Modified by:
 // Created:     04/01/98
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -112,9 +111,10 @@ bool wxPostScriptPrinter::Print(wxWindow *parent, wxPrintout *printout, bool pro
     printout->OnPreparePrinting();
 
     // Get some parameters from the printout, if defined
-    int fromPage, toPage;
-    int minPage, maxPage;
-    printout->GetPageInfo(&minPage, &maxPage, &fromPage, &toPage);
+    wxPrintPageRanges ranges;
+    const auto all = printout->GetPagesInfo(ranges);
+    const int minPage = all.fromPage;
+    const int maxPage = all.toPage;
 
     if (maxPage == 0)
     {

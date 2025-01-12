@@ -10,11 +10,10 @@
 #ifndef _WX_SIMPLEBOOK_H_
 #define _WX_SIMPLEBOOK_H_
 
-#include "wx/bookctrl.h"
+#include "wx/compositebookctrl.h"
 
 #if wxUSE_BOOKCTRL
 
-#include "wx/containr.h"
 #include "wx/vector.h"
 
 // ----------------------------------------------------------------------------
@@ -23,7 +22,7 @@
 
 // NB: This class doesn't use DLL export declaration as it's fully inline.
 
-class wxSimplebook : public wxNavigationEnabled<wxBookCtrlBase>
+class wxSimplebook : public wxCompositeBookCtrlBase
 {
 public:
     wxSimplebook()
@@ -196,9 +195,19 @@ protected:
     virtual void DoShowPage(wxWindow* page, bool show) override
     {
         if ( show )
+        {
             page->ShowWithEffect(m_showEffect, m_showTimeout);
+
+            // Unlike simple Show(), ShowWithEffect() doesn't necessarily give
+            // focus to the window, but we do expect the new page to have focus
+            // if it's currently visible.
+            if ( page->IsShownOnScreen() )
+                page->SetFocus();
+        }
         else
+        {
             page->HideWithEffect(m_hideEffect, m_hideTimeout);
+        }
     }
 
 private:

@@ -374,7 +374,7 @@ public:
             while (!GetThread()->TestDestroy())
             {
                 // since this Entry() is implemented in MyFrame context we don't
-                // need any pointer to access the m_data, m_processedData, m_dataCS
+                // need any pointer to access the m_data and m_dataCS
                 // variables... very nice!
 
                 // this is an example of the generic structure of a download thread:
@@ -486,8 +486,10 @@ public:
         will be executed in the context of the thread that called Delete() and
         <b>not</b> in this thread's context.
 
-        TestDestroy() will be true for the thread before OnDelete() gets
-        executed.
+        Note that TestDestroy() will block until OnDelete() returns, so this
+        function should return as quickly as possible and definitely shouldn't
+        perform any GUI actions nor try acquiring any locks, as this could
+        easily result in a deadlock.
 
         @since 2.9.2
 

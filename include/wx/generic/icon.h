@@ -2,7 +2,6 @@
 // Name:        wx/generic/icon.h
 // Purpose:     wxIcon implementation for ports where it's same as wxBitmap
 // Author:      Julian Smart
-// Modified by:
 // Created:     17/09/98
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -20,9 +19,9 @@
 class WXDLLIMPEXP_CORE wxIcon: public wxBitmap
 {
 public:
-    wxIcon();
+    wxIcon() = default;
 
-    wxIcon(const char* const* bits);
+    wxIcon(const char* const* bits) : wxBitmap(bits) { }
 
     // For compatibility with wxMSW where desired size is sometimes required to
     // distinguish between multiple icons in a resource.
@@ -50,7 +49,13 @@ public:
     // create from bitmap (which should have a mask unless it's monochrome):
     // there shouldn't be any implicit bitmap -> icon conversion (i.e. no
     // ctors, assignment operators...), but it's ok to have such function
-    void CopyFromBitmap(const wxBitmap& bmp);
+    void CopyFromBitmap(const wxBitmap& bmp)
+    {
+        if ( &bmp != this )
+            Ref(bmp);
+    }
+
+    wxDECLARE_VARIANT_OBJECT_EXPORTED(wxIcon, WXDLLIMPEXP_CORE);
 
 private:
     wxDECLARE_DYNAMIC_CLASS(wxIcon);

@@ -2,7 +2,6 @@
 // Name:        src/generic/calctrlg.cpp
 // Purpose:     implementation of the wxGenericCalendarCtrl
 // Author:      Vadim Zeitlin
-// Modified by:
 // Created:     29.12.99
 // Copyright:   (c) 1999 Vadim Zeitlin <zeitlin@dptmaths.ens-cachan.fr>
 // Licence:     wxWindows licence
@@ -141,7 +140,7 @@ void wxGenericCalendarCtrl::Init()
     wxDateTime::WeekDay wd;
     for ( wd = wxDateTime::Sun; wd < wxDateTime::Inv_WeekDay; wxNextWDay(wd) )
     {
-        m_weekdays[wd] = wxDateTime::GetWeekDayName(wd, wxDateTime::Name_Abbr);
+        m_weekdays[wd] = wxDateTime::GetWeekDayName(wd, wxDateTime::NameForm().Abbr().Standalone());
     }
 
     for ( size_t n = 0; n < WXSIZEOF(m_attrs); n++ )
@@ -263,7 +262,7 @@ void wxGenericCalendarCtrl::CreateMonthChoice()
     wxDateTime::Month m;
     for ( m = wxDateTime::Jan; m < wxDateTime::Inv_Month; wxNextMonth(m) )
     {
-        m_choiceMonth->Append(wxDateTime::GetMonthName(m));
+        m_choiceMonth->Append(wxDateTime::GetMonthName(m, wxDateTime::NameForm().Full().Standalone()));
     }
 
     m_choiceMonth->SetSelection(GetDate().GetMonth());
@@ -744,9 +743,7 @@ void wxGenericCalendarCtrl::DoGetSize(int *width, int *height) const
 
 void wxGenericCalendarCtrl::RecalcGeometry()
 {
-    wxClientDC dc(this);
-
-    dc.SetFont(GetFont());
+    wxInfoDC dc(this);
 
     // determine the column width (weekday names are not necessarily wider
     // than the numbers (in some languages), so let's not assume that they are)
@@ -790,8 +787,6 @@ void wxGenericCalendarCtrl::RecalcGeometry()
 void wxGenericCalendarCtrl::OnPaint(wxPaintEvent& WXUNUSED(event))
 {
     wxPaintDC dc(this);
-
-    dc.SetFont(GetFont());
 
     RecalcGeometry();
 

@@ -2,7 +2,6 @@
 // Name:        wx/propgrid/editors.h
 // Purpose:     wxPropertyGrid editors
 // Author:      Jaakko Salli
-// Modified by:
 // Created:     2007-04-14
 // Copyright:   (c) Jaakko Salli
 // Licence:     wxWindows licence
@@ -16,6 +15,8 @@
 #if wxUSE_PROPGRID
 
 #include "wx/window.h"
+
+#include <vector>
 
 class WXDLLIMPEXP_FWD_CORE wxBitmapBundle;
 class WXDLLIMPEXP_FWD_PROPGRID wxPGCell;
@@ -73,7 +74,7 @@ public:
     }
 
     // Destructor.
-    virtual ~wxPGEditor();
+    virtual ~wxPGEditor() = default;
 
     // Returns pointer to the name of the editor. For example,
     // wxPGEditor_TextCtrl has name "TextCtrl". If you don't need to access
@@ -488,7 +489,7 @@ protected:
 
     int GenId( int id ) const;
 
-    wxVector<wxWindow*> m_buttons;
+    std::vector<wxWindow*> m_buttons;
     wxSize          m_fullEditorSize;
     int             m_buttonsWidth;
 };

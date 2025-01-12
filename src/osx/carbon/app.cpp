@@ -2,7 +2,6 @@
 // Name:        src/osx/carbon/app.cpp
 // Purpose:     wxApp
 // Author:      Stefan Csomor
-// Modified by:
 // Created:     1998-01-01
 // Copyright:   (c) Stefan Csomor
 // Licence:     wxWindows licence
@@ -29,7 +28,6 @@
     #include "wx/dialog.h"
     #include "wx/msgdlg.h"
     #include "wx/textctrl.h"
-    #include "wx/memory.h"
     #include "wx/gdicmn.h"
     #include "wx/module.h"
 #endif
@@ -360,13 +358,14 @@ int wxApp::OnRun()
 void wxApp::CleanUp()
 {
     wxMacAutoreleasePool autoreleasepool;
+
+    wxAppBase::CleanUp();
+
 #if wxUSE_TOOLTIPS
     wxToolTip::RemoveToolTips() ;
 #endif
 
     DoCleanUp();
-
-    wxAppBase::CleanUp();
 }
 
 //----------------------------------------------------------------------
@@ -380,6 +379,8 @@ wxApp::wxApp()
     m_macCurrentEvent = nullptr ;
     m_macCurrentEventHandlerCallRef = nullptr ;
     m_macPool = sm_isEmbedded ? nullptr : new wxMacAutoreleasePool();
+
+    WXAppConstructed();
 }
 
 wxApp::~wxApp()

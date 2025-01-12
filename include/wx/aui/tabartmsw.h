@@ -57,7 +57,7 @@ public:
         wxWindow* wnd) override;
 
     wxSize GetTabSize(
-        wxDC& dc,
+        wxReadOnlyDC& dc,
         wxWindow* wnd,
         const wxString& caption,
         const wxBitmapBundle& bitmap,
@@ -74,13 +74,15 @@ public:
         const wxAuiNotebookPageArray& pages,
         const wxSize& requiredBmpSize) override;
 
+    void UpdateDpi() override;
+
 private:
     bool m_themed;
     wxSize m_closeBtnSize;
     wxSize m_tabSize;
     int m_maxTabHeight;
 
-    void InitSizes(wxWindow* wnd, wxDC& dc);
+    void InitSizes(wxWindow* wnd, wxReadOnlyDC& dc);
 
     bool IsThemed() const;
 };

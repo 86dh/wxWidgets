@@ -460,8 +460,7 @@ wxSocketError wxSocketImpl::CreateClient(bool wait)
     int rc = connect(m_fd, m_peer.GetAddr(), m_peer.GetLen());
     if ( rc == SOCKET_ERROR )
     {
-        wxSocketError err = GetLastError();
-        if ( err == wxSOCKET_WOULDBLOCK )
+        if ( UpdateLastError() == wxSOCKET_WOULDBLOCK )
         {
             m_establishing = true;
 
@@ -469,14 +468,12 @@ wxSocketError wxSocketImpl::CreateClient(bool wait)
             // wxSOCKET_WOULDBLOCK to the caller)
             if ( wait )
             {
-                err = SelectWithTimeout(wxSOCKET_CONNECTION_FLAG)
-                        ? wxSOCKET_NOERROR
-                        : wxSOCKET_TIMEDOUT;
+                m_error = SelectWithTimeout(wxSOCKET_CONNECTION_FLAG)
+                            ? wxSOCKET_NOERROR
+                            : wxSOCKET_TIMEDOUT;
                 m_establishing = false;
             }
         }
-
-        m_error = err;
     }
     else // connected
     {
@@ -531,17 +528,26 @@ wxSocketImpl *wxSocketImpl::Accept(wxSocketBase& wxsocket)
     ReenableEvents(wxSOCKET_INPUT_FLAG);
 
     if ( fd == INVALID_SOCKET )
+    {
+        UpdateLastError();
         return nullptr;
+    }
 
     wxScopeGuard closeSocket = wxMakeGuard(wxCloseSocket, fd);
 
     wxSocketManager * const manager = wxSocketManager::Get();
     if ( !manager )
+    {
+        UpdateLastError();
         return nullptr;
+    }
 
     wxSocketImpl * const sock = manager->CreateSocket(wxsocket);
     if ( !sock )
+    {
+        UpdateLastError();
         return nullptr;
+    }
 
     // Ownership of the socket now passes to wxSocketImpl object.
     closeSocket.Dismiss();
@@ -689,7 +695,15 @@ int wxSocketImpl::RecvDgram(void *buffer, int size)
                                   0, &from.addr, &fromlen) );
 
     if ( ret == SOCKET_ERROR )
-        return SOCKET_ERROR;
+    {
+#ifdef __WINDOWS__
+        if ( WSAGetLastError() == WSAEMSGSIZE )
+            ret = size;
+        else
+#endif // __WINDOWS__
+            return SOCKET_ERROR;
+    }
+
 
     m_peer = wxSockAddressImpl(from.addr, fromlen);
     if ( !m_peer.IsOk() )
@@ -725,7 +739,10 @@ int wxSocketImpl::Read(void *buffer, int size)
     int ret = m_stream ? RecvStream(buffer, size)
                        : RecvDgram(buffer, size);
 
-    m_error = ret == SOCKET_ERROR ? GetLastError() : wxSOCKET_NOERROR;
+    if ( ret == SOCKET_ERROR )
+        UpdateLastError();
+    else
+        m_error = wxSOCKET_NOERROR;
 
     return ret;
 }
@@ -741,7 +758,10 @@ int wxSocketImpl::Write(const void *buffer, int size)
     int ret = m_stream ? SendStream(buffer, size)
                        : SendDgram(buffer, size);
 
-    m_error = ret == SOCKET_ERROR ? GetLastError() : wxSOCKET_NOERROR;
+    if ( ret == SOCKET_ERROR )
+        UpdateLastError();
+    else
+        m_error = wxSOCKET_NOERROR;
 
     return ret;
 }
@@ -995,7 +1015,7 @@ wxUint32 wxSocketBase::DoRead(void* buffer_, wxUint32 nbytes)
                             : 0;
         if ( ret == -1 )
         {
-            if ( m_impl->GetLastError() == wxSOCKET_WOULDBLOCK )
+            if ( m_impl->GetError() == wxSOCKET_WOULDBLOCK )
             {
                 // if we don't want to wait, just return immediately
                 if ( m_flags & wxSOCKET_NOWAIT_READ )
@@ -1131,14 +1151,48 @@ wxSocketBase& wxSocketBase::ReadMsg(void* buffer, wxUint32 nbytes)
 
 wxSocketBase& wxSocketBase::Peek(void* buffer, wxUint32 nbytes)
 {
+    // If we're already closed, don't try switching the invalid socket into
+    // non-blocking mode, but still use the already read data, if any.
+    if ( m_impl->m_fd == INVALID_SOCKET )
+    {
+        m_lcount = GetPushback(buffer, nbytes, true);
+        return *this;
+    }
+
     wxSocketReadGuard read(this);
 
     // Peek() should never block
     wxSocketWaitModeChanger changeFlags(this, wxSOCKET_NOWAIT);
 
-    m_lcount = DoRead(buffer, nbytes);
+    // Guard against data loss when reading fewer bytes
+    // than are present in a received datagram
+    void* readbuf;
+    wxUint32 readbytes;
+    const wxUint32 DGRAM_MIN_READ = 65536;  // 64K is enough for UDP
+    std::vector<unsigned char> peekbuf;
+    bool usePeekbuf = !m_impl->m_stream && nbytes < DGRAM_MIN_READ;
+    if ( usePeekbuf )
+    {
+        // Allocate our own buffer
+        peekbuf.resize(DGRAM_MIN_READ);
+        readbuf = &peekbuf[0];
+        readbytes = DGRAM_MIN_READ;
+    }
+    else
+    {
+        // Use the caller-supplied buffer directly
+        readbuf = buffer;
+        readbytes = nbytes;
+    }
 
-    Pushback(buffer, m_lcount);
+    wxUint32 lcount = DoRead(readbuf, readbytes);
+
+    Pushback(readbuf, lcount);
+
+    if ( usePeekbuf )
+        lcount = GetPushback(buffer, nbytes, true);
+
+    m_lcount = lcount;
 
     return *this;
 }
@@ -1176,7 +1230,7 @@ wxUint32 wxSocketBase::DoWrite(const void *buffer_, wxUint32 nbytes)
         const int ret = m_impl->Write(buffer, nbytes);
         if ( ret == -1 )
         {
-            if ( m_impl->GetLastError() == wxSOCKET_WOULDBLOCK )
+            if ( m_impl->GetError() == wxSOCKET_WOULDBLOCK )
             {
                 if ( m_flags & wxSOCKET_NOWAIT_WRITE )
                     break;
@@ -1904,8 +1958,6 @@ bool wxSocketServer::AcceptWith(wxSocketBase& sock, bool wait)
 
     if ( !sock.m_impl )
     {
-        SetError(m_impl->GetLastError());
-
         return false;
     }
 

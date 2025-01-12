@@ -2,7 +2,6 @@
 // Name:        src/msw/combo.cpp
 // Purpose:     wxMSW wxComboCtrl
 // Author:      Jaakko Salli
-// Modified by:
 // Created:     Apr-30-2006
 // Copyright:   (c) 2005 Jaakko Salli
 // Licence:     wxWindows licence
@@ -429,7 +428,7 @@ void wxComboCtrl::OnPaintEvent( wxPaintEvent& WXUNUSED(event) )
         // Draw the control background (including the border)
         if ( m_widthCustomBorder > 0 )
         {
-            ::DrawThemeBackground( hTheme, hDc, comboBoxPart, bgState, rUseForBg, nullptr );
+            hTheme.DrawBackground(hDc, *rUseForBg, comboBoxPart, bgState);
         }
         else
         {
@@ -462,7 +461,7 @@ void wxComboCtrl::OnPaintEvent( wxPaintEvent& WXUNUSED(event) )
             else
                 butPart = CP_DROPDOWNBUTTONLEFT;
 
-            ::DrawThemeBackground( hTheme, hDc, butPart, butState, &rButton, nullptr );
+            hTheme.DrawBackground(hDc, rButton, butPart, butState);
         }
         else if ( m_iFlags & wxCC_IFLAG_BUTTON_OUTSIDE )
         {
@@ -494,8 +493,6 @@ void wxComboCtrl::OnPaintEvent( wxPaintEvent& WXUNUSED(event) )
         // right edge to be hidden
         if ( m_text )
             rectTextField.width = m_widthCustomPaint;
-
-        dc.SetFont( GetFont() );
 
         dc.SetClippingRegion(rectTextField);
         if ( m_popupInterface )
@@ -608,11 +605,7 @@ void wxComboCtrl::DoTimerEvent()
         wxMilliClock_t t = ::wxGetLocalTimeMillis();
         const wxRect& rect = m_animRect;
 
-#if wxUSE_LONGLONG
         int pos = (int) (t-m_animStart).GetLo();
-#else
-        int pos = (int) (t-m_animStart);
-#endif
         if ( pos < COMBOBOX_ANIMATION_DURATION )
         {
             int height = rect.height;

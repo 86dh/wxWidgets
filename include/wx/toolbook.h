@@ -2,7 +2,6 @@
 // Name:        wx/toolbook.h
 // Purpose:     wxToolbook: wxToolBar and wxNotebook combination
 // Author:      Julian Smart
-// Modified by:
 // Created:     2006-01-29
 // Copyright:   (c) 2006 Julian Smart
 // Licence:     wxWindows licence
@@ -15,8 +14,7 @@
 
 #if wxUSE_TOOLBOOK
 
-#include "wx/bookctrl.h"
-#include "wx/containr.h"
+#include "wx/compositebookctrl.h"
 
 class WXDLLIMPEXP_FWD_CORE wxToolBarBase;
 class WXDLLIMPEXP_FWD_CORE wxCommandEvent;
@@ -35,7 +33,7 @@ wxDECLARE_EXPORTED_EVENT( WXDLLIMPEXP_CORE, wxEVT_TOOLBOOK_PAGE_CHANGING, wxBook
 // wxToolbook
 // ----------------------------------------------------------------------------
 
-class WXDLLIMPEXP_CORE wxToolbook : public wxNavigationEnabled<wxBookCtrlBase>
+class WXDLLIMPEXP_CORE wxToolbook : public wxCompositeBookCtrlBase
 {
 public:
     wxToolbook()

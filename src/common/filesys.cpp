@@ -334,7 +334,8 @@ wxList wxFileSystem::m_Handlers;
 
 wxFileSystem::~wxFileSystem()
 {
-    WX_CLEAR_HASH_MAP(wxFSHandlerHash, m_LocalHandlers)
+    for ( const auto& kv : m_LocalHandlers )
+        delete kv.second;
 }
 
 
@@ -639,7 +640,7 @@ bool wxFileSystem::HasHandlerForPath(const wxString &location)
 
 void wxFileSystem::CleanUpHandlers()
 {
-    WX_CLEAR_LIST(wxList, m_Handlers);
+    wxClearList(m_Handlers);
 }
 
 // Returns the native path for a file URL

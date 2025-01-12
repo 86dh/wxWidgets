@@ -19,7 +19,7 @@ public:
         m_stream(stream)
     { }
 
-    virtual ~wxCOMBaseStreamAdapter() { }
+    virtual ~wxCOMBaseStreamAdapter() = default;
 
     // IUnknown
     STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override
@@ -61,7 +61,7 @@ public:
         return E_NOTIMPL;
     }
 
-    virtual HRESULT STDMETHODCALLTYPE SetSize(ULARGE_INTEGER WXUNUSED(libNewSize))
+    virtual HRESULT STDMETHODCALLTYPE SetSize(ULARGE_INTEGER WXUNUSED(libNewSize)) override
     {
         return E_NOTIMPL;
     }

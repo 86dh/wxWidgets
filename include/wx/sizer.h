@@ -613,7 +613,7 @@ public:
     virtual bool Remove( wxSizer *sizer );
     virtual bool Remove( int index );
 
-    virtual bool Detach( wxWindow *window );
+    virtual bool Detach( wxWindowBase *window );
     virtual bool Detach( wxSizer *sizer );
     virtual bool Detach( int index );
 
@@ -770,6 +770,9 @@ protected:
     virtual wxSizerItem* DoInsert(size_t index, wxSizerItem *item);
 
 private:
+    // Get the child item with the given index and assert if there is none.
+    wxSizerItemList::compatibility_iterator GetChildNode(size_t index) const;
+
     wxDECLARE_CLASS(wxSizer);
 };
 
@@ -1067,14 +1070,27 @@ public:
     virtual void ShowItems (bool show) override;
     virtual bool AreAnyItemsShown() const override;
 
-    virtual bool Detach( wxWindow *window ) override;
+    virtual bool Detach( wxWindowBase *window ) override;
     virtual bool Detach( wxSizer *sizer ) override { return wxBoxSizer::Detach(sizer); }
     virtual bool Detach( int index ) override { return wxBoxSizer::Detach(index); }
 
 protected:
     wxStaticBox   *m_staticBox;
 
+    virtual wxSizerItem* DoInsert(size_t index, wxSizerItem *item) override;
+
 private:
+    // Return true if we have any by recursively examining all children of this
+    // sizer.
+    bool CheckForNonBoxChildren(wxSizer* sizer) const;
+
+    // Return true if this particular window is not a child of the static box.
+    bool CheckIfNonBoxChild(wxWindow* win) const;
+
+    // Set to true if there are any items _not_ using the associated static box
+    // as parent in this sizer (either directly in it or in its child sizers).
+    bool m_hasNonBoxChildren = false;
+
     wxDECLARE_CLASS(wxStaticBoxSizer);
     wxDECLARE_NO_COPY_CLASS(wxStaticBoxSizer);
 };

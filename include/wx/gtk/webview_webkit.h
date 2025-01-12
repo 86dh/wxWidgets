@@ -22,6 +22,7 @@
 #endif
 
 typedef struct _WebKitWebView WebKitWebView;
+typedef struct _WebKitBackForwardListItem WebKitBackForwardListItem;
 
 //-----------------------------------------------------------------------------
 // wxWebViewWebKit
@@ -34,15 +35,10 @@ class WXDLLIMPEXP_WEBVIEW wxWebViewWebKit : public wxWebView
 public:
     wxWebViewWebKit();
 
-    wxWebViewWebKit(wxWindow *parent,
-           wxWindowID id = wxID_ANY,
-           const wxString& url = wxWebViewDefaultURLStr,
-           const wxPoint& pos = wxDefaultPosition,
-           const wxSize& size = wxDefaultSize, long style = 0,
-           const wxString& name = wxASCII_STR(wxWebViewNameStr))
-    {
-        Create(parent, id, url, pos, size, style, name);
-    }
+#if wxUSE_WEBVIEW_WEBKIT2
+    wxWebViewWebKit(WebKitWebView* parentWebView, wxWebViewWebKit* parentWebViewCtrl);
+    wxWebViewWebKit(const wxWebViewConfiguration& config);
+#endif
 
     virtual bool Create(wxWindow *parent,
            wxWindowID id = wxID_ANY,
@@ -82,8 +78,10 @@ public:
     virtual bool IsBusy() const override;
 #if wxUSE_WEBVIEW_WEBKIT2
     virtual void EnableAccessToDevTools(bool enable = true) override;
+    virtual bool ShowDevTools() override;
     virtual bool IsAccessToDevToolsEnabled() const override;
     virtual bool SetUserAgent(const wxString& userAgent) override;
+    virtual bool SetProxy(const wxString& proxy) override;
 #endif
 
     void SetZoomType(wxWebViewZoomType) override;
@@ -128,6 +126,8 @@ public:
     virtual bool AddUserScript(const wxString& javascript,
         wxWebViewUserScriptInjectionTime injectionTime = wxWEBVIEW_INJECT_AT_DOCUMENT_START) override;
     virtual void RemoveAllUserScripts() override;
+    virtual bool ClearBrowsingData(int types = wxWEBVIEW_BROWSING_DATA_ALL,
+                                   wxDateTime since = {}) override;
 #else
     virtual bool RunScript(const wxString& javascript, wxString* output = nullptr) const override;
 #endif
@@ -158,6 +158,9 @@ public:
 #if wxUSE_WEBVIEW_WEBKIT2
     // This method needs to be public to make it callable from a callback
     void ProcessJavaScriptResult(GAsyncResult *res, wxWebKitRunScriptParams* params) const;
+
+    // Make the configuration accessible from callbacks
+    wxWebViewConfiguration m_config;
 #endif
 
 protected:
@@ -200,6 +203,9 @@ private:
     //Used for webkit2 extension
     GDBusServer *m_dbusServer;
     GDBusProxy *m_extension;
+
+    static wxSharedPtr<wxWebViewHistoryItem>
+    CreateHistoryItemFromWKItem(WebKitBackForwardListItem* gtkitem);
 #endif
 
     wxDECLARE_DYNAMIC_CLASS(wxWebViewWebKit);
@@ -216,9 +222,18 @@ public:
                               const wxSize& size = wxDefaultSize,
                               long style = 0,
                               const wxString& name = wxASCII_STR(wxWebViewNameStr)) override
-    { return new wxWebViewWebKit(parent, id, url, pos, size, style, name); }
+    {
+        std::unique_ptr<wxWebView> webView(new wxWebViewWebKit);
+        if (webView->Create(parent, id, url, pos, size, style, name))
+            return webView.release();
+        else
+            return nullptr;
+    }
+
 #if wxUSE_WEBVIEW_WEBKIT2
-    virtual wxVersionInfo GetVersionInfo() override;
+    virtual wxVersionInfo GetVersionInfo(wxVersionContext context) override;
+    virtual wxWebViewConfiguration CreateConfiguration() override;
+    virtual wxWebView* CreateWithConfig(const wxWebViewConfiguration& config) override;
 #endif
 };
 

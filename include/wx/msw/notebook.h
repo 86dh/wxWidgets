@@ -81,8 +81,8 @@ public:
     // remove all pages
   bool DeleteAllPages() override;
 
-    // inserts a new page to the notebook (it will be deleted ny the notebook,
-    // don't delete it yourself). If bSelect, this page becomes active.
+    // inserts a new page to the notebook (it will be deleted by the notebook,
+    // don't delete it yourself). If bSelect is true,  this page becomes active.
   bool InsertPage(size_t nPage,
                   wxNotebookPage *pPage,
                   const wxString& strText,
@@ -141,6 +141,8 @@ protected:
   // common part of all ctors
   void Init();
 
+  virtual int MSWGetToolTipMessage() const override;
+
   // hides the currently shown page and shows the given one (if not -1) and
   // updates m_selection accordingly
   void UpdateSelection(int selNew);
@@ -181,6 +183,10 @@ protected:
   void OnEraseBackground(wxEraseEvent& event);
   void OnPaint(wxPaintEvent& event);
 
+  // Paint the notebook ourselves on the provided DC.
+  void MSWNotebookPaint(wxDC& dc);
+
+
   // true if we have already subclassed our updown control
   bool m_hasSubclassedUpdown;
 
@@ -192,6 +198,12 @@ protected:
   wxPoint m_bgBrushAdj;
 #endif // wxUSE_UXTHEME
 
+private:
+  // This function is used instead of TCM_HITTEST for implementing HitTest()
+  // for the notebooks with horizontal orientation.
+  //
+  // It has the same semantics as HitTest().
+  int MSWHitTestLeftRight(const wxPoint& pt, long *flags) const;
 
   wxDECLARE_DYNAMIC_CLASS_NO_COPY(wxNotebook);
   wxDECLARE_EVENT_TABLE();

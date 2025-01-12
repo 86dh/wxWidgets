@@ -2,7 +2,6 @@
 // Name:        src/msw/textctrl.cpp
 // Purpose:     wxTextCtrl
 // Author:      Julian Smart
-// Modified by:
 // Created:     04/01/98
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -98,6 +97,28 @@
         #endif
     #endif // wxUSE_SPELLCHECK
 #endif // wxUSE_RICHEDIT
+
+#if wxUSE_RICHEDIT2
+    // Note that some MinGW headers define PFN_BULLET but not the rest of them,
+    // so test for something else.
+    #ifndef PFN_ARABIC
+        #define PFN_BULLET      1
+        #define PFN_ARABIC      2
+        #define PFN_LCLETTER    3
+        #define PFN_UCLETTER    4
+        #define PFN_LCROMAN     5
+        #define PFN_UCROMAN     6
+    #endif
+
+    #ifndef PFNS_PAREN
+        #define PFNS_PAREN      0x0000
+        #define PFNS_PARENS     0x0100
+        #define PFNS_PERIOD     0x0200
+        #define PFNS_PLAIN      0x0300
+        #define PFNS_NONUMBER   0x0400
+        #define PFNS_NEWNUMBER  0x8000
+    #endif
+#endif // wxUSE_RICHEDIT2
 
 #if wxUSE_INKEDIT
     #include <wx/dynlib.h>
@@ -878,7 +899,7 @@ bool wxTextCtrl::EnableProofCheck(const wxTextProofOptions& options)
 
     ::SendMessage(GetHwnd(), EM_SETLANGOPTIONS, 0, langOptions);
 
-   return GetProofCheckOptions().IsSpellCheckEnabled();
+   return GetProofCheckOptions().IsSpellCheckEnabled() == options.IsSpellCheckEnabled();
 }
 
 wxTextProofOptions wxTextCtrl::GetProofCheckOptions() const
@@ -1092,6 +1113,143 @@ void wxTextCtrl::DoSetValue(const wxString& value, int flags)
             SendUpdateEvent();
     }
 }
+
+#if wxUSE_RICHEDIT
+
+DWORD wxCALLBACK MSWEditStreamOutCallback(DWORD_PTR dwCookie, LPBYTE pbBuff,
+    LONG cb, LONG* pcb)
+{
+    // write the text
+    std::string* psEntry = reinterpret_cast<std::string*>(dwCookie);
+    psEntry->append(reinterpret_cast<const char*>(pbBuff), cb);
+    *pcb = cb;
+
+    return 0;
+}
+
+wxString wxTextCtrl::GetRTFValue() const
+{
+    if ( !IsRich() )
+    {
+        wxFAIL_MSG("RTF support is only available for rich controls!");
+        return wxEmptyString;
+    }
+
+    // The Rich Edit control must write to a char buffer,
+    // which we will later convert to a Unicode wxString using the current code page.
+    //
+    // We will reserve enough space assuming that the RTF will be twice as large
+    // as the unencoded content.
+    std::string buffer;
+    buffer.reserve(GetLastPosition() * 2);
+
+    // Use a EDITSTREAMCALLBACK to stream text out from the control.
+    EDITSTREAM es{ 0 };
+    es.dwError = 0;
+    es.pfnCallback = MSWEditStreamOutCallback;
+    // our callback will write to a char buffer (i.e., std::string)
+    es.dwCookie = reinterpret_cast<DWORD_PTR>(&buffer);
+
+    // Do NOT call with "(CP_UTF8 << 16) | SF_USECODEPAGE", as this will format the
+    // output RTF to UTF-8 with a "urtf1" header (note the 'u').
+    // Although this is a more modern format, few programs
+    // (including Microsoft Wordpad) recognize it.
+    //
+    // Instead, write the content to an ANSI string using the current code page
+    // (which will use a "rtf1" header). The control will encode any Unicode values
+    // outside of the current code page with "\'[0-9A-F][0-9A-F]" syntax that most
+    // parsers would support.
+    //
+    // Finally, use SFF_PLAINRTF so that the generated RTF is more portable between
+    // RTF readers.
+    ::SendMessage(GetHwnd(), EM_STREAMOUT,
+        (WPARAM)(SF_RTF | SFF_PLAINRTF), (LPARAM)&es);
+
+    // Valid RTF is supposed to consist of 7-bit ASCII characters only,
+    // anything else is escaped.
+    return wxString::FromAscii(buffer.c_str(), buffer.length());
+}
+
+void wxTextCtrl::SetRTFValue(const wxString& val)
+{
+    wxCHECK_RET(IsRich(), "RTF support is only available for rich controls!");
+
+    SETTEXTEX textInfo{ 0 };
+    textInfo.flags = ST_DEFAULT | ST_UNICODE;
+    textInfo.codepage = 1200;
+
+    // Setting from Unicode will fail if control is read-only
+    // (this is an undocumented "feature"), so we need to toggle that temporarily.
+    const bool
+        isReadOnly = (::GetWindowLong(GetHwnd(), GWL_STYLE) & ES_READONLY) != 0;
+    if ( isReadOnly )
+    {
+        ::SendMessage(GetHwnd(), EM_SETREADONLY, FALSE, 0);
+    }
+
+    ::SendMessage(GetHwnd(), EM_SETTEXTEX, (WPARAM)&textInfo,
+        (LPARAM)static_cast<const wchar_t*>(val.wc_str()));
+
+    if ( isReadOnly )
+    {
+        ::SendMessage(GetHwnd(), EM_SETREADONLY, TRUE, 0);
+    }
+
+    SetInsertionPoint(0);
+}
+
+wxTextSearchResult wxTextCtrl::SearchText(const wxTextSearch& search) const
+{
+    // set up the flags
+    WPARAM flags = 0;
+    switch ( search.m_direction )
+    {
+        case wxTextSearch::Direction::Down:
+            flags |= FR_DOWN;
+            break;
+
+        case wxTextSearch::Direction::Up:
+            // Nothing to do this is (surprisingly) the default.
+            break;
+    }
+    if (search.m_wholeWord)
+    {
+        flags |= FR_WHOLEWORD;
+    }
+    if (search.m_matchCase)
+    {
+        flags |= FR_MATCHCASE;
+    }
+
+    FINDTEXTEX findText;
+    findText.chrg.cpMin = (search.m_startingPosition != -1) ?
+        // user-provided start
+        search.m_startingPosition :
+        // if going down, then start from 0; otherwise, start from end
+        (search.m_direction == wxTextSearch::Direction::Down) ? 0 : GetLastPosition();
+    if (search.m_direction == wxTextSearch::Direction::Down)
+    {
+        // go to the end of the text
+        findText.chrg.cpMax = -1;
+    }
+    else
+    {
+        // will search from the end (or user-provided position) and go upward
+        // to the start of the text
+        findText.chrg.cpMax = 0;
+    }
+
+    findText.lpstrText = search.m_searchValue.wc_str();
+
+    if (SendMessage(GetHwnd(), EM_FINDTEXTEXW, flags, (LPARAM)&findText) == -1)
+    {
+        return wxTextSearchResult();
+    }
+
+    return wxTextSearchResult{ findText.chrgText.cpMin, findText.chrgText.cpMax };
+}
+
+#endif // wxUSE_RICHEDIT
 
 void wxTextCtrl::WriteText(const wxString& value)
 {
@@ -2555,10 +2713,9 @@ wxSize wxTextCtrl::DoGetSizeFromTextSize(int xlen, int ylen) const
         hText += EDIT_HEIGHT_FROM_CHAR_HEIGHT(cy) - cy;
     }
 
-    // Perhaps the user wants something different from CharHeight, or ylen
-    // is used as the height of a multiline text.
-    if ( ylen > 0 )
-        hText += ylen - GetCharHeight();
+    // We should always use at least the specified height if it's valid.
+    if ( ylen > hText )
+        hText = ylen;
 
     return wxSize(wText, hText);
 }
@@ -3181,6 +3338,24 @@ bool wxTextCtrl::MSWSetParaFormat(const wxTextAttr& style, long start, long end)
     }
 
 #if wxUSE_RICHEDIT2
+    if ( style.HasLineSpacing() )
+    {
+        pf.dwMask |= PFM_LINESPACING;
+
+        switch ( style.GetLineSpacing() )
+            {
+        case wxTEXT_ATTR_LINE_SPACING_NORMAL:
+            pf.bLineSpacingRule = 0;
+            break;
+        case wxTEXT_ATTR_LINE_SPACING_HALF:
+            pf.bLineSpacingRule = 1;
+            break;
+        case wxTEXT_ATTR_LINE_SPACING_TWICE:
+            pf.bLineSpacingRule = 2;
+            break;
+            };
+    }
+
     if ( style.HasParagraphSpacingAfter() )
     {
         pf.dwMask |= PFM_SPACEAFTER;
@@ -3195,6 +3370,44 @@ bool wxTextCtrl::MSWSetParaFormat(const wxTextAttr& style, long start, long end)
 
         // Convert from 1/10 mm to TWIPS
         pf.dySpaceBefore = (int) (((double) style.GetParagraphSpacingBefore()) * mm2twips / 10.0) ;
+    }
+
+    if ( style.HasBulletStyle() )
+    {
+        pf.dwMask |= PFM_NUMBERINGSTYLE;
+        pf.dwMask |= PFM_NUMBERING;
+
+        // number/bullet formats
+        if ((style.GetBulletStyle() & wxTEXT_ATTR_BULLET_STYLE_NONE) != 0)
+            pf.wNumbering = 0;
+        else if ((style.GetBulletStyle() & wxTEXT_ATTR_BULLET_STYLE_STANDARD) != 0)
+            pf.wNumbering = PFN_BULLET;
+        else if ((style.GetBulletStyle() & wxTEXT_ATTR_BULLET_STYLE_ARABIC) != 0)
+            pf.wNumbering = PFN_ARABIC;
+        else if ((style.GetBulletStyle() & wxTEXT_ATTR_BULLET_STYLE_LETTERS_LOWER) != 0)
+            pf.wNumbering = PFN_LCLETTER;
+        else if ((style.GetBulletStyle() & wxTEXT_ATTR_BULLET_STYLE_LETTERS_UPPER) != 0)
+            pf.wNumbering = PFN_UCLETTER;
+        else if ((style.GetBulletStyle() & wxTEXT_ATTR_BULLET_STYLE_ROMAN_LOWER) != 0)
+            pf.wNumbering = PFN_LCROMAN;
+        else if ((style.GetBulletStyle() & wxTEXT_ATTR_BULLET_STYLE_ROMAN_UPPER) != 0)
+            pf.wNumbering = PFN_UCROMAN;
+
+        // number display
+        if ( style.HasBulletNumber() )
+        {
+            pf.dwMask |= PFM_NUMBERINGSTART;
+            pf.wNumberingStart = style.GetBulletNumber();
+            pf.wNumberingStyle = PFNS_NEWNUMBER;
+        }
+        else if ((style.GetBulletStyle() & wxTEXT_ATTR_BULLET_STYLE_RIGHT_PARENTHESIS) != 0)
+            pf.wNumberingStyle = PFNS_PAREN;
+        else if ((style.GetBulletStyle() & wxTEXT_ATTR_BULLET_STYLE_PARENTHESES) != 0)
+            pf.wNumberingStyle = PFNS_PARENS;
+        else if ((style.GetBulletStyle() & wxTEXT_ATTR_BULLET_STYLE_PERIOD) != 0)
+            pf.wNumberingStyle = PFNS_PERIOD;
+        else if ((style.GetBulletStyle() & wxTEXT_ATTR_BULLET_STYLE_STANDARD) != 0)
+            pf.wNumberingStyle = PFNS_PLAIN;
     }
 #endif // wxUSE_RICHEDIT2
 

@@ -24,17 +24,16 @@
 
 #if wxUSE_ACCEL
     #include "wx/accel.h"
-    #include "wx/scopedptr.h"
+
+    #include <memory>
 #endif // wxUSE_ACCEL
 
+#include "wx/modalhook.h"
 #include "wx/stockitem.h"
 
 #include "wx/gtk/private.h"
 #include "wx/gtk/private/image.h"
 #include "wx/gtk/private/mnemonics.h"
-
-// Number of currently open modal dialogs, defined in src/gtk/toplevel.cpp.
-extern int wxOpenModalDialogsCount;
 
 // we use normal item but with a special id for the menu title
 static const int wxGTK_TITLE_ID = -3;
@@ -83,7 +82,7 @@ private:
 // modal dialog itself that should have a dialog as their invoking window.
 static bool IsMenuEventAllowed(wxMenu* menu)
 {
-    if ( wxOpenModalDialogsCount )
+    if ( wxModalDialogHook::GetOpenCount() )
     {
         wxWindow* tlw = wxGetTopLevelParent(menu->GetWindow());
         if ( !tlw || !wxDynamicCast(tlw, wxDialog) )
@@ -1433,7 +1432,7 @@ void GtkAccel::Init(const wxAcceleratorEntry* entry)
 
 GtkAccel::GtkAccel(const wxMenuItem* item)
 {
-    wxScopedPtr<wxAcceleratorEntry> accel(item->GetAccel());
+    std::unique_ptr<wxAcceleratorEntry> accel(item->GetAccel());
     Init(accel.get());
 
 #ifndef __WXGTK4__

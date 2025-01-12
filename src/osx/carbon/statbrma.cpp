@@ -2,7 +2,6 @@
 // Name:        src/osx/carbon/statbarma.cpp
 // Purpose:     native implementation of wxStatusBar (optional)
 // Author:      Stefan Csomor
-// Modified by:
 // Created:     1998-01-01
 // Copyright:   (c) 1998 Stefan Csomor
 // Licence:     wxWindows licence
@@ -123,8 +122,6 @@ void wxStatusBarMac::OnPaint(wxPaintEvent& WXUNUSED(event))
 
     dc.SetTextForeground(tlw == keyWindow ? m_textActive : m_textInactive);
 
-    if ( GetFont().IsOk() )
-        dc.SetFont(GetFont());
     dc.SetBackgroundMode(wxBRUSHSTYLE_TRANSPARENT);
 
     // compute char height only once for all panes:

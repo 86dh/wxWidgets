@@ -2,7 +2,6 @@
 // Name:        wx/pickerbase.h
 // Purpose:     wxPickerBase definition
 // Author:      Francesco Montorsi (based on Vadim Zeitlin's code)
-// Modified by:
 // Created:     14/4/2006
 // Copyright:   (c) Vadim Zeitlin, Francesco Montorsi
 // Licence:     wxWindows Licence
@@ -35,10 +34,8 @@ extern WXDLLIMPEXP_DATA_CORE(const char) wxButtonNameStr[];
 class WXDLLIMPEXP_CORE wxPickerBase : public wxNavigationEnabled<wxControl>
 {
 public:
-    // ctor: text is the associated text control
-    wxPickerBase() : m_text(nullptr), m_picker(nullptr), m_sizer(nullptr)
-        { }
-    virtual ~wxPickerBase() {}
+    wxPickerBase() = default;
+    virtual ~wxPickerBase() = default;
 
 
     // if present, intercepts wxPB_USE_TEXTCTRL style and creates the text control
@@ -93,10 +90,16 @@ public:     // public API
     wxControl *GetPickerCtrl()
         { return m_picker; }
 
+    // It's not clear why did these functions ever existed, but they can't be
+    // used, both controls are, and can be, managed only by the picker itself.
+#ifdef WXWIN_COMPATIBILITY_3_2
+    wxDEPRECATED_MSG("must not be used, text control is managed internally")
     void SetTextCtrl(wxTextCtrl* text)
         { m_text = text; }
+    wxDEPRECATED_MSG("must not be used, picker control is managed internally")
     void SetPickerCtrl(wxControl* picker)
         { m_picker = picker; }
+#endif // WXWIN_COMPATIBILITY_3_2
 
     // methods that derived class must/may override
     virtual void UpdatePickerFromTextCtrl() = 0;
@@ -110,7 +113,6 @@ protected:
 
 
     // event handlers
-    void OnTextCtrlDelete(wxWindowDestroyEvent &);
     void OnTextCtrlUpdate(wxCommandEvent &);
     void OnTextCtrlKillFocus(wxFocusEvent &);
 
@@ -155,9 +157,9 @@ protected:
     void PostCreation();
 
 protected:
-    wxTextCtrl *m_text;     // can be null
-    wxControl *m_picker;
-    wxBoxSizer *m_sizer;
+    wxTextCtrl *m_text = nullptr;     // can be null
+    wxControl *m_picker = nullptr;
+    wxBoxSizer *m_sizer = nullptr;
 
 private:
     // Common implementation of Set{Text,Picker}CtrlGrowable().

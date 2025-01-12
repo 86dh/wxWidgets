@@ -2,7 +2,6 @@
 // Name:        samples/except/except.cpp
 // Purpose:     shows how C++ exceptions can be used in wxWidgets
 // Author:      Vadim Zeitlin
-// Modified by:
 // Created:     2003-09-17
 // Copyright:   (c) 2003-2005 Vadim Zeitlin
 // Licence:     wxWindows licence
@@ -61,8 +60,12 @@
 
 static void DoCrash()
 {
+    wxGCC_WARNING_SUPPRESS(nonnull)
+
     char *p = 0;
     strcpy(p, "Let's crash");
+
+    wxGCC_WARNING_RESTORE(nonnull)
 }
 
 // ----------------------------------------------------------------------------
@@ -564,7 +567,7 @@ void MyFrame::OnShowAssert(wxCommandEvent& WXUNUSED(event))
 {
     // provoke an assert from wxArrayString
     wxArrayString arr;
-    arr[0];
+    wxUnusedVar(arr[0]);
 }
 
 #if wxUSE_THREADS

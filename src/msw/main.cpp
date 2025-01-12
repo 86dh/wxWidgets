@@ -2,7 +2,6 @@
 // Name:        src/msw/main.cpp
 // Purpose:     WinMain/DllMain
 // Author:      Julian Smart
-// Modified by:
 // Created:     04/01/98
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -28,6 +27,8 @@
 
 #include "wx/dynlib.h"
 
+#include "wx/private/init.h"
+
 #include "wx/msw/private.h"
 #include "wx/msw/seh.h"
 
@@ -38,7 +39,6 @@
 
 // defined in common/init.cpp
 extern int wxEntryReal(int& argc, wxChar **argv);
-extern int wxEntryCleanupReal(int& argc, wxChar **argv);
 
 // ============================================================================
 // implementation: various entry points
@@ -98,7 +98,7 @@ void wxSETranslator(unsigned int WXUNUSED(code), EXCEPTION_POINTERS *ep)
     {
         default:
             wxFAIL_MSG( wxT("unexpected wxGlobalSEHandler() return value") );
-            // fall through
+            wxFALLTHROUGH;
 
         case EXCEPTION_EXECUTE_HANDLER:
             // if wxApp::OnFatalException() had been called we should exit the
@@ -170,7 +170,7 @@ int wxEntry(int& argc, wxChar **argv)
     {
         return wxEntryReal(argc, argv);
     }
-    wxSEH_HANDLE(-1)
+    wxSEH_HANDLE(wxApp::GetFatalErrorExitCode())
 }
 
 #else // !wxUSE_ON_FATAL_EXCEPTION
@@ -188,32 +188,6 @@ int wxEntry(int& argc, wxChar **argv)
 // Windows-specific wxEntry
 // ----------------------------------------------------------------------------
 
-struct wxMSWCommandLineArguments
-{
-    wxMSWCommandLineArguments() { argc = 0; argv = nullptr; }
-
-    // Initialize this object from the current process command line.
-    //
-    // In Unicode build prefer to use the standard function for tokenizing the
-    // command line, but we can't use it with narrow strings, so use our own
-    // approximation instead then.
-    void Init()
-    {
-        argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
-    }
-
-    ~wxMSWCommandLineArguments()
-    {
-        if ( argc )
-            ::LocalFree(argv);
-    }
-
-    int argc;
-    wxChar **argv;
-};
-
-static wxMSWCommandLineArguments wxArgs;
-
 #if wxUSE_GUI
 
 // common part of wxMSW-specific wxEntryStart() and wxEntry() overloads
@@ -228,12 +202,12 @@ wxMSWEntryCommon(HINSTANCE hInstance, int nCmdShow)
     wxUnusedVar(nCmdShow);
 #endif
 
-    wxArgs.Init();
+    wxInitData::Get().MSWInitialize();
 
     return true;
 }
 
-WXDLLEXPORT bool wxEntryStart(HINSTANCE hInstance,
+WXDLLIMPEXP_CORE bool wxEntryStart(HINSTANCE hInstance,
                               HINSTANCE WXUNUSED(hPrevInstance),
                               wxCmdLineArgType WXUNUSED(pCmdLine),
                               int nCmdShow)
@@ -241,18 +215,20 @@ WXDLLEXPORT bool wxEntryStart(HINSTANCE hInstance,
     if ( !wxMSWEntryCommon(hInstance, nCmdShow) )
        return false;
 
-    return wxEntryStart(wxArgs.argc, wxArgs.argv);
+    auto& initData = wxInitData::Get();
+    return wxEntryStart(initData.argc, initData.argv);
 }
 
-WXDLLEXPORT int wxEntry(HINSTANCE hInstance,
+WXDLLIMPEXP_CORE int wxEntry(HINSTANCE hInstance,
                         HINSTANCE WXUNUSED(hPrevInstance),
                         wxCmdLineArgType WXUNUSED(pCmdLine),
                         int nCmdShow)
 {
     if ( !wxMSWEntryCommon(hInstance, nCmdShow) )
-        return -1;
+        return wxApp::GetFatalErrorExitCode();
 
-    return wxEntry(wxArgs.argc, wxArgs.argv);
+    auto& initData = wxInitData::Get();
+    return wxEntry(initData.argc, initData.argv);
 }
 
 #endif // wxUSE_GUI
@@ -265,9 +241,10 @@ WXDLLEXPORT int wxEntry(HINSTANCE hInstance,
 
 int wxEntry()
 {
-    wxArgs.Init();
+    wxInitData::Get().MSWInitialize();
 
-    return wxEntry(wxArgs.argc, wxArgs.argv);
+    auto& initData = wxInitData::Get();
+    return wxEntry(initData.argc, initData.argv);
 }
 
 HINSTANCE wxhInstance = 0;

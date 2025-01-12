@@ -18,6 +18,8 @@ AUIDIR =   $(WXDIR)/src/aui
 RIBBONDIR = $(WXDIR)/src/ribbon
 PROPGRIDDIR = $(WXDIR)/src/propgrid
 STCDIR =   $(WXDIR)/src/stc
+SCINTILLADIR = $(WXDIR)/src/stc/scintilla
+LEXILLADIR = $(WXDIR)/src/stc/lexilla
 UNIXDIR  = $(WXDIR)/src/unix
 PNGDIR   = $(WXDIR)/src/png
 JPEGDIR  = $(WXDIR)/src/jpeg
@@ -73,7 +75,7 @@ CP_P = cp -p
 ALL_DIST: distrib_clean
 	mkdir _dist_dir
 	mkdir $(DISTDIR)
-	$(CP_P) $(WXDIR)/configure.in $(DISTDIR)
+	$(CP_P) $(WXDIR)/configure.ac $(DISTDIR)
 	$(CP_P) $(WXDIR)/configure $(DISTDIR)
 	$(CP_P) $(WXDIR)/autoconf_inc.m4 $(DISTDIR)
 	$(CP_P) $(WXDIR)/wxwin.m4 $(DISTDIR)
@@ -217,12 +219,13 @@ ALL_GUI_DIST: ALL_DIST
 	$(CP_P) $(PROPGRIDDIR)/*.cpp $(DISTDIR)/src/propgrid
 
 	mkdir $(DISTDIR)/src/stc
-	mkdir $(DISTDIR)/src/stc/scintilla
-	mkdir $(DISTDIR)/src/stc/scintilla/src
-	mkdir $(DISTDIR)/src/stc/scintilla/include
 	$(CP_P) $(STCDIR)/*.* $(DISTDIR)/src/stc
-	$(CP_P) $(STCDIR)/scintilla/src/* $(DISTDIR)/src/stc/scintilla/src
-	$(CP_P) $(STCDIR)/scintilla/include/* $(DISTDIR)/src/stc/scintilla/include
+
+	mkdir $(DISTDIR)/src/stc/scintilla
+	$(CP_PR) $(SCINTILLADIR)/* $(DISTDIR)/src/stc/scintilla
+
+	mkdir $(DISTDIR)/src/stc/lexilla
+	$(CP_PR) $(LEXILLADIR)/* $(DISTDIR)/src/stc/lexilla
 
 	mkdir $(DISTDIR)/src/png
 	$(CP_PR) $(PNGDIR)/* $(DISTDIR)/src/png
@@ -262,9 +265,9 @@ ALL_GUI_DIST: ALL_DIST
 
 BASE_DIST: ALL_DIST INTL_DIST
 	# make --disable-gui the default
-	rm $(DISTDIR)/configure.in
+	rm $(DISTDIR)/configure.ac
 	sed 's/DEFAULT_wxUSE_GUI=yes/DEFAULT_wxUSE_GUI=no/' \
-		$(WXDIR)/configure.in > $(DISTDIR)/configure.in
+		$(WXDIR)/configure.ac > $(DISTDIR)/configure.ac
 	rm $(DISTDIR)/configure
 	sed 's/DEFAULT_wxUSE_GUI=yes/DEFAULT_wxUSE_GUI=no/' \
 		$(WXDIR)/configure > $(DISTDIR)/configure
@@ -745,7 +748,7 @@ distdir: @GUIDIST@
 	@# in other dist targets.
 	find $(DISTDIR) \( -name "CVS" -o -name ".cvsignore" -o -name "*.dsp" -o -name "*.dsw" -o -name "*.hh*" -o \
 			\( -name "makefile.*" -a ! -name "makefile.gcc" -a ! -name "makefile.unx" \) \) \
-			-print | egrep -v '/samples/.*\.hh.$$' | xargs rm -rf
+			-print | grep -vE '/samples/.*\.hh.$$' | xargs rm -rf
 
 dist: distdir
 	@cd _dist_dir && tar ch $(DISTDIRNAME) | gzip -f9 > ../$(WXARCHIVE);

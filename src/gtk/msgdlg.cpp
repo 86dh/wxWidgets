@@ -2,7 +2,6 @@
 // Name:        src/gtk/msgdlg.cpp
 // Purpose:     wxMessageDialog for GTK+2
 // Author:      Vaclav Slavik
-// Modified by:
 // Created:     2003/02/28
 // Copyright:   (c) Vaclav Slavik, 2003
 // Licence:     wxWindows licence
@@ -23,9 +22,9 @@
 #include "wx/modalhook.h"
 
 #include "wx/gtk/private.h"
+#include "wx/gtk/private/list.h"
 #include "wx/gtk/private/messagetype.h"
 #include "wx/gtk/private/mnemonics.h"
-#include "wx/gtk/private/dialogcount.h"
 
 wxIMPLEMENT_CLASS(wxMessageDialog, wxDialog);
 
@@ -187,6 +186,26 @@ void wxMessageDialog::GTKCreateMsgDialog()
         gtk_window_set_keep_above(GTK_WINDOW(m_widget), TRUE);
     }
 
+    // A GTKMessageDialog usually displays its labels without selection enabled,
+    // so we enable selection to allow the user to select+copy the text out of
+    // the dialog.
+    {
+        GtkMessageDialog * const msgdlg = GTK_MESSAGE_DIALOG(m_widget);
+
+        GtkWidget* const area = gtk_message_dialog_get_message_area(msgdlg);
+        wxGtkList labels(gtk_container_get_children(GTK_CONTAINER(area)));
+
+        for ( GList* elem = labels; elem; elem = elem->next )
+        {
+            GtkWidget* const widget = GTK_WIDGET( elem->data );
+
+            if ( GTK_IS_LABEL(widget) )
+            {
+                gtk_label_set_selectable(GTK_LABEL(widget), TRUE);
+            }
+        }
+    }
+
     // we need to add buttons manually if we use custom labels or always for
     // Yes/No/Cancel dialog as GTK+ doesn't support it natively
     const bool addButtons = buttons == GTK_BUTTONS_NONE;
@@ -266,8 +285,6 @@ int wxMessageDialog::ShowModal()
     // parent TLW will disappear..
     if (m_parent)
         gtk_window_present( GTK_WINDOW(m_parent->m_widget) );
-
-    wxOpenModalDialogLocker modalLocker;
 
     gint result = gtk_dialog_run(GTK_DIALOG(m_widget));
     GTKDisconnect(m_widget);

@@ -23,6 +23,7 @@
     #include "wx/dcclient.h"
     #include "wx/frame.h"       // Only for wxFRAME_SHAPED.
     #include "wx/region.h"
+    #include "wx/sizer.h"
     #include "wx/msw/private.h"
 #endif // WX_PRECOMP
 
@@ -34,8 +35,9 @@
 #endif // wxUSE_GRAPHICS_CONTEXT
 
 #include "wx/dynlib.h"
-#include "wx/scopedptr.h"
 #include "wx/msw/missing.h"
+
+#include <memory>
 
 // ============================================================================
 // wxNonOwnedWindow implementation
@@ -90,7 +92,7 @@ public:
     {
         // Create the region corresponding to this path and set it as windows
         // shape.
-        wxScopedPtr<wxGraphicsContext> context(wxGraphicsContext::Create(win));
+        std::unique_ptr<wxGraphicsContext> context(wxGraphicsContext::Create(win));
         Region gr(static_cast<GraphicsPath*>(m_path.GetNativePath()));
         win->SetShape(
             wxRegion(
@@ -116,7 +118,7 @@ private:
         event.Skip();
 
         wxPaintDC dc(m_win);
-        wxScopedPtr<wxGraphicsContext> context(wxGraphicsContext::Create(dc));
+        std::unique_ptr<wxGraphicsContext> context(wxGraphicsContext::Create(dc));
         context->SetPen(wxPen(*wxLIGHT_GREY, 2));
         context->StrokePath(m_path);
     }
@@ -289,16 +291,29 @@ bool wxNonOwnedWindow::HandleDPIChange(const wxSize& newDPI, const wxRect& newRe
         // The best size doesn't scale exactly with the DPI, so while the new
         // size is usually a decent guess, it's typically not exactly correct.
         // We can't always do much better, but at least ensure that the window
-        // is still big enough to show its contents.
-        wxSize diff = GetBestSize() - newRect.GetSize();
-        diff.IncTo(wxSize(0, 0));
+        // is still big enough to show its contents if it uses a sizer.
+        //
+        // Note that if it doesn't use a sizer, we can't do anything here as
+        // using the best size wouldn't be the right thing to do: some controls
+        // (e.g. multiline wxTextCtrl) can have best size much bigger than
+        // their current, or minimal, size and we don't want to expand them
+        // significantly just because the DPI has changed, see #23091.
+        wxRect actualNewRect = newRect;
+        if ( wxSizer* sizer = GetSizer() )
+        {
+            const wxSize minSize = ClientToWindowSize(sizer->GetMinSize());
+            wxSize diff = minSize - newRect.GetSize();
+            diff.IncTo(wxSize(0, 0));
 
-        // Use wxRect::Inflate() to ensure that the center of the (possibly)
-        // bigger rectangle is at the same position as the center of the
-        // proposed one, to prevent moving the window back to the old display
-        // from which it might have been just moved to this one, as doing this
-        // would result in an infinite stream of WM_DPICHANGED messages.
-        SetSize(newRect.Inflate(diff.x, diff.y));
+            // Use wxRect::Inflate() to ensure that the center of the bigger
+            // rectangle is at the same position as the center of the proposed
+            // one, to prevent moving the window back to the old display from
+            // which it might have been just moved to this one, as doing this
+            // would result in an infinite stream of WM_DPICHANGED messages.
+            actualNewRect.Inflate(diff);
+        }
+
+        SetSize(actualNewRect);
     }
 
     Refresh();

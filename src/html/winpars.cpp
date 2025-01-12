@@ -25,6 +25,7 @@
 #include "wx/fontmap.h"
 #include "wx/uri.h"
 
+#include "wx/private/hyperlink.h"
 
 //-----------------------------------------------------------------------------
 // wxHtmlWinParser
@@ -192,12 +193,25 @@ void wxHtmlWinParser::InitParser(const wxString& source)
 
     m_UseLink = false;
     m_Link = wxHtmlLinkInfo( wxEmptyString );
-    m_LinkColor.Set(0, 0, 0xFF);
-    m_ActualColor.Set(0, 0, 0);
-    const wxColour windowColour = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW) ;
-    m_ActualBackgroundColor = m_windowInterface
-                            ? m_windowInterface->GetHTMLBackgroundColour()
-                            : windowColour;
+    m_LinkColor = wxPrivate::GetLinkColour();
+
+    // if an HTML window interface is connected to this parser,
+    // then use its control background color and the system
+    // default text color.
+    if ( m_windowInterface )
+    {
+        m_ActualColor = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
+        m_ActualBackgroundColor = m_windowInterface->GetHTMLBackgroundColour();
+    }
+    // Otherwise, no window interface is connected to this parser
+    // (e.g., an HTML renderer being used for printing).
+    // Fall back to the default white background and black text.
+    else
+    {
+        m_ActualColor = *wxBLACK;
+        m_ActualBackgroundColor = *wxWHITE;
+    }
+
     m_ActualBackgroundMode = wxBRUSHSTYLE_TRANSPARENT;
     m_Align = wxHTML_ALIGN_LEFT;
     m_ScriptMode = wxHTML_SCRIPT_NORMAL;
@@ -342,7 +356,8 @@ void wxHtmlWinParser::AddText(const wxString& txt)
             const wxChar d = temp[templen++] = *i;
             if ((d == wxT('\n')) || (d == wxT('\r')) || (d == wxT(' ')) || (d == wxT('\t')))
             {
-                ++i, ++x;
+                ++i;
+                ++x;
                 while ( (i < end) &&
                         (*i == wxT('\n') || *i == wxT('\r') ||
                          *i == wxT(' ') || *i == wxT('\t')) )

@@ -2,7 +2,6 @@
 // Name:        src/msw/frame.cpp
 // Purpose:     wxFrame
 // Author:      Julian Smart
-// Modified by:
 // Created:     01/02/97
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -39,6 +38,7 @@
 #endif // WX_PRECOMP
 
 #include "wx/msw/private.h"
+#include "wx/msw/private/darkmode.h"
 
 #include "wx/generic/statusbr.h"
 
@@ -244,6 +244,17 @@ void wxFrame::DoGetClientSize(int *x, int *y) const
         }
     }
 #endif // wxUSE_STATUSBAR
+
+    // Ensure that we always return a valid size, it can never be negative.
+    //
+    // Note that this takes care of the case when the frame is minimized, as
+    // Windows client size in this case is (0,0), but while we could test for
+    // this separately, it seems more robust to just always do this here to
+    // establish our post-condition.
+    if ( x && *x < 0 )
+        *x = 0;
+    if ( y && *y < 0 )
+        *y = 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -759,7 +770,7 @@ bool wxFrame::HandleSize(int WXUNUSED(x), int WXUNUSED(y), WXUINT id)
         case SIZE_RESTORED:
         case SIZE_MAXIMIZED:
             // only do it it if we were iconized before, otherwise resizing the
-            // parent frame has a curious side effect of bringing it under it's
+            // parent frame has a curious side effect of bringing it under its
             // children
             if ( m_showCmd != SW_MINIMIZE )
                 break;
@@ -836,6 +847,12 @@ WXLRESULT wxFrame::MSWWindowProc(WXUINT message, WXWPARAM wParam, WXLPARAM lPara
 {
     WXLRESULT rc = 0;
     bool processed = false;
+
+    if ( GetMenuBar() &&
+          wxMSWDarkMode::HandleMenuMessage(&rc, this, message, wParam, lParam) )
+    {
+        return rc;
+    }
 
     switch ( message )
     {
@@ -939,4 +956,16 @@ wxPoint wxFrame::GetClientAreaOrigin() const
 #endif // wxUSE_TOOLBAR
 
     return pt;
+}
+
+void wxFrame::MSWBeforeDPIChangedEvent(const wxDPIChangedEvent& WXUNUSED(event))
+{
+#if wxUSE_STATUSBAR
+    // If this frame uses a status bar, we need to adjust its height here
+    // before executing the user-defined wxEVT_DPI_CHANGED handler which may
+    // want to change the client size of the frame (e.g. using wxSizer::Fit()),
+    // because otherwise this wouldn't work correctly because the status bar
+    // would still have its old height, corresponding to the old DPI.
+    PositionStatusBar();
+#endif // wxUSE_STATUSBAR
 }

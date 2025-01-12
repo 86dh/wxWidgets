@@ -30,7 +30,8 @@
 #include "wx/dataview.h"
 #include "wx/renderer.h"
 #include "wx/scopedarray.h"
-#include "wx/scopedptr.h"
+
+#include <memory>
 
 // ----------------------------------------------------------------------------
 // Constants
@@ -486,7 +487,7 @@ wxTreeListModel::InsertItem(Node* parent,
         dvc->SetIndent(dvc->GetIndent());
     }
 
-    wxScopedPtr<Node>
+    std::unique_ptr<Node>
         newItem(new Node(parent, text, imageClosed, imageOpened, data));
 
     // If we have no children at all, then inserting as last child is the same
@@ -1184,6 +1185,7 @@ unsigned wxTreeListCtrl::GetSelections(wxTreeListItems& selections) const
 void wxTreeListCtrl::Select(wxTreeListItem item)
 {
     wxCHECK_RET( m_view, "Must create first" );
+    wxCHECK_RET( item->GetParent(), "Can't select the invisible root item" );
 
     m_view->Select(m_model->ToNonRootDVI(item));
 }
@@ -1191,6 +1193,7 @@ void wxTreeListCtrl::Select(wxTreeListItem item)
 void wxTreeListCtrl::Unselect(wxTreeListItem item)
 {
     wxCHECK_RET( m_view, "Must create first" );
+    wxCHECK_RET( item->GetParent(), "Can't deselect the invisible root item" );
 
     m_view->Unselect(m_model->ToNonRootDVI(item));
 }
@@ -1198,6 +1201,7 @@ void wxTreeListCtrl::Unselect(wxTreeListItem item)
 bool wxTreeListCtrl::IsSelected(wxTreeListItem item) const
 {
     wxCHECK_MSG( m_view, false, "Must create first" );
+    wxCHECK_MSG( item->GetParent(), false, "Invisible root can't be selected" );
 
     return m_view->IsSelected(m_model->ToNonRootDVI(item));
 }
@@ -1310,6 +1314,7 @@ void wxTreeListCtrl::SetSortColumn(unsigned col, bool ascendingOrder)
     wxCHECK_RET( col < m_view->GetColumnCount(), "Invalid column index" );
 
     m_view->GetColumn(col)->SetSortOrder(ascendingOrder);
+    m_model->Resort();
 }
 
 bool wxTreeListCtrl::GetSortColumn(unsigned* col, bool* ascendingOrder)

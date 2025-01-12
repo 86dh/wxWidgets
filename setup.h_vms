@@ -123,19 +123,9 @@ typedef pid_t GPid;
 #define __VMS__
 
 #undef __IA64__
-#define __ALPHA__
 
 /* NanoX (with wxX11) */
 #define wxUSE_NANOX 0
-
-/* PowerPC Darwin & Mac OS X */
-#undef __POWERPC__
-
-/* Hack to make IOGraphicsTypes.h not define Point conflicting with MacTypes */
-#undef __Point__
-
-/* MS-DOS with DJGPP */
-#undef __DOS__
 
 /* Stupid hack; __WINDOWS__ clashes with wx/defs.h */
 #ifndef __WINDOWS__
@@ -169,15 +159,7 @@ typedef pid_t GPid;
 
 #define wxDIALOG_UNIT_COMPATIBILITY   1
 
-#define wxUSE_DEBUG_CONTEXT 1
-
 #define wxUSE_DEBUGREPORT 1
-
-#define wxUSE_MEMORY_TRACING 0
-
-#define wxUSE_GLOBAL_MEMORY_OPERATORS 0
-
-#define wxUSE_DEBUG_NEW_ALWAYS 1
 
 #define wxUSE_ON_FATAL_EXCEPTION 1
 
@@ -187,14 +169,9 @@ typedef pid_t GPid;
 
 #define wxUSE_REPRODUCIBLE_BUILD 1
 
-#ifndef wxUSE_UNICODE
-#if defined( __WXX11__ )
-    #define wxUSE_UNICODE 0
-#else
-    #define wxUSE_UNICODE 1
-#endif
-#endif
+#define wxUSE_UNICODE_UTF8 0
 
+#define wxUSE_UTF8_LOCALE_ONLY 0
 
 #define wxUSE_EXCEPTIONS 1
 
@@ -216,13 +193,9 @@ typedef pid_t GPid;
 
 #define wxUSE_PRINTF_POS_PARAMS      0
 
-#define wxUSE_STL 0
+#define wxUSE_STD_CONTAINERS 0
 
-#define wxUSE_STD_CONTAINERS wxUSE_STL
-
-#define wxUSE_STD_STRING_CONV_IN_WXSTRING wxUSE_STL
-
-#define wxUSE_LONGLONG      1
+#define wxUSE_STD_STRING_CONV_IN_WXSTRING 0
 
 #define wxUSE_BASE64        1
 
@@ -526,8 +499,6 @@ typedef pid_t GPid;
 #define wxUSE_AUTOID_MANAGEMENT 0
 #endif
 
-#define wxUSE_COMMON_DIALOGS 1
-
 #define wxUSE_BUSYINFO      1
 
 #define wxUSE_CHOICEDLG     1
@@ -679,9 +650,6 @@ typedef pid_t GPid;
 #define wxUSE_SELECT_DISPATCHER 1
 #define wxUSE_EPOLL_DISPATCHER 0
 
-#define wxUSE_UNICODE_UTF8 0
-#define wxUSE_UTF8_LOCALE_ONLY 0
-
 /*
    Use GStreamer for Unix.
 
@@ -799,11 +767,6 @@ typedef pid_t GPid;
 #undef HAVE_BROKEN_LIBSTDCXX_VISIBILITY
 
 /*
- * On GNU systems use re_search instead of regexec, since the latter does a
- * strlen on the search text affecting the performance of some operations.
- */
-#undef HAVE_RE_SEARCH
-/*
  * Use SDL for audio (Unix)
  */
 #define wxUSE_LIBSDL 0
@@ -881,17 +844,6 @@ typedef pid_t GPid;
 #define wxUSE_WEBKIT 1
 
 /*
- * The const keyword is being introduced more in wxWindows.
- * You can use this setting to maintain backward compatibility.
- * If 0: will use const wherever possible.
- * If 1: will use const only where necessary
- *       for precompiled headers to work.
- * If 2: will be totally backward compatible, but precompiled
- *       headers may not work and program size will be larger.
- */
-#define CONST_COMPATIBILITY 0
-
-/*
  * use the session manager to detect KDE/GNOME
  */
 #define wxUSE_DETECT_SM     0
@@ -907,9 +859,6 @@ typedef pid_t GPid;
 
 /* The type of statvfs(2) argument */
 #undef WX_STATFS_T
-
-/* The signal handler prototype */
-#define wxTYPE_SA_HANDLER int
 
 /* gettimeofday() usually takes 2 arguments, but some really old systems might
  * have only one, in which case define WX_GETTIMEOFDAY_NO_TZ */
@@ -1285,9 +1234,6 @@ typedef pid_t GPid;
 #ifdef __WIN32__
 
 #define wxUSE_POSTSCRIPT_ARCHITECTURE_IN_MSW 1
-
-/* Define if the header pbt.h is missing.  */
-#undef NEED_PBT_H
 
 #endif /* __WIN32__ */
 

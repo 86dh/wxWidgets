@@ -79,8 +79,10 @@ CPPUNIT_TEST_SUITE_NAMED_REGISTRATION( ListCtrlTestCase, "ListCtrlTestCase" );
 void ListCtrlTestCase::setUp()
 {
     m_list = new wxListCtrl(wxTheApp->GetTopWindow());
-    m_list->SetWindowStyle(wxLC_REPORT);
+    m_list->SetWindowStyle(wxLC_REPORT | wxLC_EDIT_LABELS);
     m_list->SetSize(400, 200);
+
+    wxTheApp->GetTopWindow()->Raise();
 }
 
 void ListCtrlTestCase::tearDown()
@@ -91,9 +93,17 @@ void ListCtrlTestCase::tearDown()
 
 void ListCtrlTestCase::EditLabel()
 {
+    EventCounter editItem(m_list, wxEVT_LIST_BEGIN_LABEL_EDIT);
+    EventCounter endEditItem(m_list, wxEVT_LIST_END_LABEL_EDIT);
+
     m_list->InsertColumn(0, "Column 0");
     m_list->InsertItem(0, "foo");
     m_list->EditLabel(0);
+
+    m_list->EndEditLabel(true);
+
+    CHECK(editItem.GetCount() == 1);
+    CHECK(endEditItem.GetCount() == 1);
 }
 
 void ListCtrlTestCase::SubitemRect()

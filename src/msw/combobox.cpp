@@ -2,7 +2,6 @@
 // Name:        src/msw/combobox.cpp
 // Purpose:     wxComboBox class
 // Author:      Julian Smart
-// Modified by:
 // Created:     01/02/97
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -537,7 +536,7 @@ void wxComboBox::MSWRecreate()
         SetSelection(selection);
 
     // If disabled we'll have to disable it again after re-creating
-    if ( !IsEnabled() )
+    if ( !IsThisEnabled() )
         DoEnable(false);
 }
 

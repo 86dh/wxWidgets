@@ -2,7 +2,6 @@
 // Name:        src/msw/menuitem.cpp
 // Purpose:     wxMenuItem implementation
 // Author:      Vadim Zeitlin
-// Modified by:
 // Created:     11.11.97
 // Copyright:   (c) 1998 Vadim Zeitlin <zeitlin@dptmaths.ens-cachan.fr>
 // Licence:     wxWindows licence
@@ -122,12 +121,6 @@ public:
 private:
     int m_modeOld;
 };
-
-inline bool IsGreaterThanStdSize(const wxBitmap& bmp, const wxWindow* win)
-{
-    return bmp.GetWidth() > wxGetSystemMetrics(SM_CXMENUCHECK, win) ||
-            bmp.GetHeight() > wxGetSystemMetrics(SM_CYMENUCHECK, win);
-}
 
 } // anonymous namespace
 
@@ -740,6 +733,13 @@ void wxMenuItem::DoSetBitmap(const wxBitmapBundle& bmpNew, bool bChecked)
 
 void wxMenuItem::SetupBitmaps()
 {
+    // Owner-drawn items must not return valid bitmaps even if they have them,
+    // this somehow breaks the item measuring logic and the menu may not become
+    // wide enough to accommodate the items text, so just don't do anything at
+    // all for them here.
+    if ( IsOwnerDrawn() )
+        return;
+
     const int itemPos = MSGetMenuItemPos();
     if ( itemPos == -1 )
     {
@@ -780,7 +780,7 @@ wxSize wxMenuItem::GetMenuTextExtent(const wxString& text) const
     // Note that we must have both a valid menu and a valid window by the time
     // we can be called -- and GetFontToUse() already assumes this, so there is
     // no need to check that they're both non-null here.
-    wxClientDC dc(GetMenu()->GetWindow());
+    wxInfoDC dc(GetMenu()->GetWindow());
 
     wxFont font;
     GetFontToUse(font);
@@ -957,25 +957,19 @@ bool wxMenuItem::OnDrawItem(wxDC& dc, const wxRect& rc,
             if ( ::IsThemeBackgroundPartiallyTransparent(hTheme,
                     MENU_POPUPITEM, state) )
             {
-                ::DrawThemeBackground(hTheme, hdc,
-                                           MENU_POPUPBACKGROUND,
-                                           0, &rect, nullptr);
+                hTheme.DrawBackground(hdc, rect, MENU_POPUPBACKGROUND);
             }
 
-            ::DrawThemeBackground(hTheme, hdc, MENU_POPUPGUTTER,
-                                       0, &rcGutter, nullptr);
+            hTheme.DrawBackground(hdc, rcGutter, MENU_POPUPGUTTER);
 
             if ( IsSeparator() )
             {
                 rcSeparator.left = rcGutter.right;
-                ::DrawThemeBackground(hTheme, hdc, MENU_POPUPSEPARATOR,
-                                           0, &rcSeparator, nullptr);
+                hTheme.DrawBackground(hdc, rcSeparator, MENU_POPUPSEPARATOR);
                 return true;
             }
 
-            ::DrawThemeBackground(hTheme, hdc, MENU_POPUPITEM,
-                                       state, &rcSelection, nullptr);
-
+            hTheme.DrawBackground(hdc, rcSelection, MENU_POPUPITEM, state);
         }
         else
 #endif // wxUSE_UXTHEME
@@ -1191,8 +1185,7 @@ void wxMenuItem::DrawStdCheckMark(WXHDC hdc_, const RECT* rc, wxODStatus stat)
                                                     ? MCB_DISABLED
                                                     : MCB_NORMAL;
 
-        ::DrawThemeBackground(hTheme, hdc, MENU_POPUPCHECKBACKGROUND,
-                                   stateCheckBg, &rcBg, nullptr);
+        hTheme.DrawBackground(hdc, rcBg, MENU_POPUPCHECKBACKGROUND, stateCheckBg);
 
         POPUPCHECKSTATES stateCheck;
         if ( GetKind() == wxITEM_CHECK )
@@ -1206,8 +1199,7 @@ void wxMenuItem::DrawStdCheckMark(WXHDC hdc_, const RECT* rc, wxODStatus stat)
                                                : MC_BULLETNORMAL;
         }
 
-        ::DrawThemeBackground(hTheme, hdc, MENU_POPUPCHECK,
-                                   stateCheck, rc, nullptr);
+        hTheme.DrawBackground(hdc, *rc, MENU_POPUPCHECK, stateCheck);
     }
     else
 #endif // wxUSE_UXTHEME

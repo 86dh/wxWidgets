@@ -2,7 +2,6 @@
 // Name:        src/msw/printdlg.cpp
 // Purpose:     wxPrintDialog, wxPageSetupDialog
 // Author:      Julian Smart
-// Modified by:
 // Created:     04/01/98
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -87,7 +86,8 @@ public:
             return false;
 
         DWORD bufSize = 0;
-        if ( !::GetPrinter(m_hPrinter, level, nullptr, 0, &bufSize) || !bufSize )
+        ::GetPrinter(m_hPrinter, level, nullptr, 0, &bufSize);
+        if ( !bufSize )
             return false;
 
         if ( !::GetPrinter(m_hPrinter,
@@ -422,8 +422,13 @@ void wxWindowsPrintNativeData::InitializeDevMode(const wxString& printerName, Wi
     // this replaces the PrintDlg function which creates the DEVMODE filled only with data from default printer.
     if ( !m_devMode && !printerName.IsEmpty() )
     {
+        // ensure that we have a printer object here, otherwise we are unable to determine m_devMode
+        WinPrinter fallbackPrinter;
+        if (!printer)
+            printer = &fallbackPrinter;
+
         // Open printer
-        if ( printer && printer->Open( printerName ) == TRUE )
+        if ( printer->Open( printerName ) == TRUE )
         {
             DWORD dwNeeded, dwRet;
 
@@ -467,7 +472,7 @@ void wxWindowsPrintNativeData::InitializeDevMode(const wxString& printerName, Wi
         }
     }
 
-    if ( !m_devMode )
+    if ( !m_devMode && printerName.IsEmpty() )
     {
         // Use PRINTDLG as a way of creating a DEVMODE object
         PRINTDLG pd;
@@ -515,6 +520,7 @@ void wxWindowsPrintNativeData::InitializeDevMode(const wxString& printerName, Wi
     }
 
     // Try to initialize devmode to user or system default.
+    GlobalPtr newDevMode;
     if (m_devMode)
     {
         GlobalPtrLock lockDevMode(m_devMode);
@@ -543,17 +549,20 @@ void wxWindowsPrintNativeData::InitializeDevMode(const wxString& printerName, Wi
                 if ( pDevMode )
                 {
                     DWORD devModeSize = pDevMode->dmSize + pDevMode->dmDriverExtra;
-                    GlobalPtr newDevMode(devModeSize, GMEM_FIXED | GMEM_ZEROINIT);
+                    newDevMode.Init(devModeSize, GMEM_FIXED | GMEM_ZEROINIT);
                     if ( newDevMode )
                     {
                         memcpy(newDevMode, pDevMode, devModeSize);
-
-                        ::GlobalFree(m_devMode);
-                        m_devMode = newDevMode.Release();
                     }
                 }
             }
         }
+    }
+
+    if ( newDevMode )
+    {
+        ::GlobalFree(static_cast<HGLOBAL>(m_devMode));
+        m_devMode = newDevMode.Release();
     }
 }
 
@@ -792,9 +801,14 @@ bool wxWindowsPrintDialog::Create(wxWindow *p, wxPrintDialogData* data)
 
 wxWindowsPrintDialog::~wxWindowsPrintDialog()
 {
-    PRINTDLG *pd = (PRINTDLG *) m_printDlg;
+    PRINTDLGEX* pd = (PRINTDLGEX*) m_printDlg;
+
     if (pd && pd->hDevMode)
         GlobalFree(pd->hDevMode);
+
+    if (pd && pd->lpPageRanges)
+        delete pd->lpPageRanges;
+
     if ( pd )
         delete pd;
 
@@ -813,11 +827,11 @@ int wxWindowsPrintDialog::ShowModal()
 
     ConvertToNative( m_printDialogData );
 
-    PRINTDLG *pd = (PRINTDLG*) m_printDlg;
-
+    PRINTDLGEX* pd = (PRINTDLGEX*) m_printDlg;
     pd->hwndOwner = hWndParent;
 
-    bool ret = (PrintDlg( pd ) != 0);
+    HRESULT dlgRes = PrintDlgEx(pd);
+    bool ret = (dlgRes == S_OK && pd->dwResultAction == PD_RESULT_PRINT);
 
     pd->hwndOwner = 0;
 
@@ -851,14 +865,14 @@ bool wxWindowsPrintDialog::ConvertToNative( wxPrintDialogData &data )
         (wxWindowsPrintNativeData *) data.GetPrintData().GetNativeData();
     data.GetPrintData().ConvertToNative();
 
-    PRINTDLG *pd = (PRINTDLG*) m_printDlg;
+    PRINTDLGEX* pd = (PRINTDLGEX*) m_printDlg;
 
     // Shouldn't have been defined anywhere
     if (pd)
         return false;
 
-    pd = new PRINTDLG;
-    memset( pd, 0, sizeof(PRINTDLG) );
+    pd = new PRINTDLGEX;
+    memset(pd, 0, sizeof(PRINTDLGEX));
     m_printDlg = (void*) pd;
 
     pd->hDevMode = static_cast<HGLOBAL>(native_data->GetDevMode());
@@ -870,31 +884,66 @@ bool wxWindowsPrintDialog::ConvertToNative( wxPrintDialogData &data )
     pd->hDevNames = static_cast<HGLOBAL>(native_data->GetDevNames());
     native_data->SetDevNames(nullptr);
 
+    pd->nStartPage = START_PAGE_GENERAL;
+    pd->nMinPage = (DWORD)data.GetMinPage();
+    pd->nMaxPage = (DWORD)data.GetMaxPage();
+    pd->nCopies = (DWORD)data.GetNoCopies();
 
-    pd->hDC = nullptr;
-    pd->nFromPage = (WORD)data.GetFromPage();
-    pd->nToPage = (WORD)data.GetToPage();
-    pd->nMinPage = (WORD)data.GetMinPage();
-    pd->nMaxPage = (WORD)data.GetMaxPage();
-    pd->nCopies = (WORD)data.GetNoCopies();
+    // Required only if PD_NOPAGENUMS flag is not set.
+    // Currently only one page range is supported.
+    if ( data.GetEnablePageNumbers() )
+    {
+        pd->nMaxPageRanges = (DWORD)data.GetMaxPageRanges();
+
+        // Fill the provided PRINTPAGERANGE with valid values, even if the
+        // input data is invalid because otherwise PrintDlgEx() would simply
+        // fail with E_INVALIDARG.
+        auto setPageRange = [](PRINTPAGERANGE* ppr, int from, int to)
+        {
+            DWORD nFromPage = (DWORD)from;
+            DWORD nToPage = (DWORD)to;
+
+            if ( !nFromPage )
+                nFromPage = 1;
+            if ( nToPage < nFromPage )
+                nToPage = nFromPage;
+
+            ppr->nFromPage = nFromPage;
+            ppr->nToPage = nToPage;
+        };
+
+        const wxVector<wxPrintPageRange>& ranges = data.GetPageRanges();
+        if ( ranges.empty() )
+        {
+            pd->nPageRanges = 1;
+            pd->lpPageRanges = new PRINTPAGERANGE[pd->nMaxPageRanges];
+
+            setPageRange(pd->lpPageRanges, data.GetFromPage(), data.GetToPage());
+        }
+        else
+        {
+            pd->nPageRanges = (DWORD) ranges.size();
+            if ( pd->nPageRanges > pd->nMaxPageRanges )
+                pd->nMaxPageRanges = pd->nPageRanges;
+            pd->lpPageRanges = new PRINTPAGERANGE[pd->nMaxPageRanges];
+
+            PRINTPAGERANGE* ppr = pd->lpPageRanges;
+            for ( const wxPrintPageRange& range : ranges )
+            {
+                setPageRange(ppr++, range.fromPage, range.toPage);
+            }
+        }
+    }
 
     pd->Flags = PD_RETURNDC;
-    pd->lStructSize = sizeof( PRINTDLG );
-
-    pd->hwndOwner = nullptr;
-    pd->hInstance = nullptr;
-    pd->lCustData = 0;
-    pd->lpfnPrintHook = nullptr;
-    pd->lpfnSetupHook = nullptr;
-    pd->lpPrintTemplateName = nullptr;
-    pd->lpSetupTemplateName = nullptr;
-    pd->hPrintTemplate = nullptr;
-    pd->hSetupTemplate = nullptr;
+    pd->lStructSize = sizeof(PRINTDLGEX);
 
     if ( data.GetAllPages() )
         pd->Flags |= PD_ALLPAGES;
     if ( data.GetSelection() )
         pd->Flags |= PD_SELECTION;
+    if ( data.GetCurrentPage() )
+        pd->Flags |= PD_CURRENTPAGE;
     if ( data.GetCollate() )
         pd->Flags |= PD_COLLATE;
     if ( data.GetPrintToFile() )
@@ -903,9 +952,11 @@ bool wxWindowsPrintDialog::ConvertToNative( wxPrintDialogData &data )
         pd->Flags |= PD_DISABLEPRINTTOFILE;
     if ( !data.GetEnableSelection() )
         pd->Flags |= PD_NOSELECTION;
+    if ( !data.GetEnableCurrentPage() )
+        pd->Flags |= PD_NOCURRENTPAGE;
     if ( !data.GetEnablePageNumbers() )
         pd->Flags |= PD_NOPAGENUMS;
-    else if ( (!data.GetAllPages()) && (!data.GetSelection()) && (data.GetFromPage() != 0) && (data.GetToPage() != 0))
+    else if ( (!data.GetAllPages()) && (!data.GetSelection()) && (!data.GetCurrentPage()) && (!data.GetPageRanges().empty()) )
         pd->Flags |= PD_PAGENUMS;
     if ( data.GetEnableHelp() )
         pd->Flags |= PD_SHOWHELP;
@@ -915,7 +966,7 @@ bool wxWindowsPrintDialog::ConvertToNative( wxPrintDialogData &data )
 
 bool wxWindowsPrintDialog::ConvertFromNative( wxPrintDialogData &data )
 {
-    PRINTDLG *pd = (PRINTDLG*) m_printDlg;
+    PRINTDLGEX* pd = (PRINTDLGEX*) m_printDlg;
     if ( pd == nullptr )
         return false;
 
@@ -948,18 +999,32 @@ bool wxWindowsPrintDialog::ConvertFromNative( wxPrintDialogData &data )
     // into wxWidgets form.
     native_data->TransferTo( data.GetPrintData() );
 
-    data.SetFromPage( pd->nFromPage );
-    data.SetToPage( pd->nToPage );
+    if ( pd->lpPageRanges )
+    {
+        wxPrintPageRanges ranges(pd->nPageRanges);
+        const PRINTPAGERANGE* ppr = pd->lpPageRanges;
+        for (auto& range : ranges)
+        {
+            range.fromPage = ppr->nFromPage;
+            range.toPage = ppr->nToPage;
+            ++ppr;
+        }
+
+        data.SetPageRanges(ranges);
+    }
+
     data.SetMinPage( pd->nMinPage );
     data.SetMaxPage( pd->nMaxPage );
     data.SetNoCopies( pd->nCopies );
 
-    data.SetAllPages( (((pd->Flags & PD_PAGENUMS) != PD_PAGENUMS) && ((pd->Flags & PD_SELECTION) != PD_SELECTION)) );
+    data.SetAllPages( ((pd->Flags & (PD_PAGENUMS | PD_SELECTION | PD_CURRENTPAGE)) == 0) );
     data.SetSelection( ((pd->Flags & PD_SELECTION) == PD_SELECTION) );
+    data.SetCurrentPage(((pd->Flags & PD_CURRENTPAGE) == PD_CURRENTPAGE));
     data.SetCollate( ((pd->Flags & PD_COLLATE) == PD_COLLATE) );
     data.SetPrintToFile( ((pd->Flags & PD_PRINTTOFILE) == PD_PRINTTOFILE) );
     data.EnablePrintToFile( ((pd->Flags & PD_DISABLEPRINTTOFILE) != PD_DISABLEPRINTTOFILE) );
     data.EnableSelection( ((pd->Flags & PD_NOSELECTION) != PD_NOSELECTION) );
+    data.EnableCurrentPage(((pd->Flags & PD_NOCURRENTPAGE) != PD_NOCURRENTPAGE));
     data.EnablePageNumbers( ((pd->Flags & PD_NOPAGENUMS) != PD_NOPAGENUMS) );
     data.EnableHelp( ((pd->Flags & PD_SHOWHELP) == PD_SHOWHELP) );
 

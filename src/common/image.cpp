@@ -16,7 +16,6 @@
 
 #ifndef WX_PRECOMP
     #include "wx/log.h"
-    #include "wx/hash.h"
     #include "wx/utils.h"
     #include "wx/math.h"
     #include "wx/module.h"
@@ -30,6 +29,8 @@
 
 // For memcpy
 #include <string.h>
+
+#include <unordered_set>
 
 // make the code compile with either wxFile*Stream or wxFFile*Stream:
 #define HAS_FILE_STREAMS (wxUSE_STREAMS && (wxUSE_FILE || wxUSE_FFILE))
@@ -227,6 +228,10 @@ void wxImage::Destroy()
 
 void wxImage::Clear(unsigned char value)
 {
+    wxCHECK_RET( IsOk(), wxT("invalid image") );
+
+    AllocExclusive();
+
     memset(M_IMGDATA->m_data, value, M_IMGDATA->m_width*M_IMGDATA->m_height*3);
 }
 
@@ -390,11 +395,11 @@ wxImage wxImage::ShrinkBy( int xFactor , int yFactor ) const
                     unsigned char red = pixel[0] ;
                     unsigned char green = pixel[1] ;
                     unsigned char blue = pixel[2] ;
-                    unsigned char alpha = 255  ;
-                    if ( source_alpha )
-                        alpha = *(source_alpha + y_offset + x * xFactor + x1) ;
                     if ( !hasMask || red != maskRed || green != maskGreen || blue != maskBlue )
                     {
+                        unsigned char alpha = 255  ;
+                        if ( source_alpha )
+                            alpha = *(source_alpha + y_offset + x * xFactor + x1) ;
                         if ( alpha > 0 )
                         {
                             avgRed += red ;
@@ -458,6 +463,19 @@ wxImage::Scale( int width, int height, wxImageResizeQuality quality ) const
     // Resample the image using the method as specified.
     switch ( quality )
     {
+        case wxIMAGE_QUALITY_NORMAL:
+            // When downscaling, we prefer to use bilinear resampling as it
+            // results in better quality at reasonable speed.
+            if ( width <= old_width && height <= old_height )
+            {
+                image = ResampleBilinear(width, height);
+                break;
+            }
+
+            // Otherwise use NEAREST for upscaling.
+            wxFALLTHROUGH;
+
+        case wxIMAGE_QUALITY_FAST:
         case wxIMAGE_QUALITY_NEAREST:
             if ( old_width % width == 0 && old_width >= width &&
                 old_height % height == 0 && old_height >= height )
@@ -1736,6 +1754,14 @@ wxImage::Paste(const wxImage & image, int x, int y,
                         float light_left = (alpha_target_data[i] / 255.0f) * (1.0f - source_alpha);
                         float result_alpha = source_alpha + light_left;
                         alpha_target_data[i] = (unsigned char)((result_alpha * 255) + 0.5f);
+                        if (result_alpha <= 0)
+                        {
+                            int c = 3 * i;
+                            target_data[c++] = 0;
+                            target_data[c++] = 0;
+                            target_data[c] = 0;
+                            continue;
+                        }
                         for (int c = 3 * i; c < 3 * (i + 1); c++)
                         {
                             target_data[c] =
@@ -2172,6 +2198,8 @@ unsigned char *wxImage::GetAlpha() const
 
 void wxImage::InitAlpha()
 {
+    wxCHECK_RET( IsOk(), wxT("invalid image") );
+
     wxCHECK_RET( !HasAlpha(), wxT("image already has an alpha channel") );
 
     // initialize memory for alpha channel
@@ -2537,8 +2565,7 @@ int wxImage::GetLoadFlags() const
 
 // Under Windows we can load wxImage not only from files but also from
 // resources.
-#if defined(__WINDOWS__) && wxUSE_WXDIB && wxUSE_IMAGE \
-&& !defined(__WXQT__) // undefined reference to `wxDIB::ConvertToImage(wxDIB::ConversionFlags) const'
+#if defined(__WINDOWS__) && wxUSE_WXDIB && wxUSE_IMAGE
     #define HAS_LOAD_FROM_RESOURCE
 #endif
 
@@ -3509,8 +3536,8 @@ wxImage::FindFirstUnusedColour(unsigned char *r,
 //
 unsigned long wxImage::CountColours( unsigned long stopafter ) const
 {
-    wxHashTable h;
-    wxObject dummy;
+    std::unordered_set<unsigned long> h;
+
     unsigned char *p;
     unsigned long size, nentries;
 
@@ -3527,9 +3554,8 @@ unsigned long wxImage::CountColours( unsigned long stopafter ) const
         b = *(p++);
         key = wxImageHistogram::MakeKey(r, g, b);
 
-        if (h.Get(key) == nullptr)
+        if (h.insert(key).second)
         {
-            h.Put(key, &dummy);
             nentries++;
         }
     }

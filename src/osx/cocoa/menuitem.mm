@@ -2,7 +2,6 @@
 // Name:        src/osx/cocoa/menuitem.mm
 // Purpose:     wxMenuItem implementation
 // Author:      Stefan Csomor
-// Modified by:
 // Created:     1998-01-01
 // Copyright:   (c) Stefan Csomor
 // Licence:     wxWindows licence
@@ -86,9 +85,11 @@ SEL wxOSXGetSelectorFromID(int menuId )
     wxUnusedVar(sender);
     if ( impl )
     {
-        wxMenuItem* menuitem = impl->GetWXPeer();
-        if ( menuitem->GetMenu()->HandleCommandProcess(menuitem) == false )
+        if ( wxMenuItem* menuitem = impl->GetWXPeer() )
         {
+            // Ignore the return value as there doesn't seem anything to do
+            // with it here.
+            menuitem->GetMenu()->HandleCommandProcess(menuitem);
         }
      }
 }

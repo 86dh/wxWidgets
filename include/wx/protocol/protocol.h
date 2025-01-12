@@ -2,7 +2,6 @@
 // Name:        wx/protocol/protocol.h
 // Purpose:     Protocol base class
 // Author:      Guilhem Lavaux
-// Modified by:
 // Created:     10/07/1997
 // Copyright:   (c) 1997, 1998 Guilhem Lavaux
 // Licence:     wxWindows licence
@@ -88,7 +87,7 @@ public:
     // override wxSocketBase::SetTimeout function to avoid that the internal
     // m_uiDefaultTimeout goes out-of-sync:
     virtual void SetTimeout(long seconds) override
-        { SetDefaultTimeout(seconds); }
+        { SetDefaultTimeout(static_cast<wxUint32>(seconds)); }
 
 
     // logging support: each wxProtocol object may have the associated logger

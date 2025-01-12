@@ -10,12 +10,12 @@
 
 class QListWidget;
 class QModelIndex;
-class QScrollArea;
 
 class WXDLLIMPEXP_CORE wxListBox : public wxListBoxBase
 {
 public:
-    wxListBox();
+    wxListBox() = default;
+
     wxListBox(wxWindow *parent, wxWindowID id,
             const wxPoint& pos = wxDefaultPosition,
             const wxSize& size = wxDefaultSize,
@@ -58,9 +58,15 @@ public:
 
     virtual int GetSelection() const override;
 
-    virtual QWidget *GetHandle() const override;
+    virtual void EnsureVisible(int item) override;
+
+    virtual int GetTopItem() const override;
+
+    virtual int GetCountPerPage() const override;
 
     void QtSendEvent(wxEventType evtType, int rowIndex, bool selected);
+
+    QListWidget* GetQListWidget() const;
 
 protected:
     virtual void DoSetFirstItem(int n) override;
@@ -79,17 +85,13 @@ protected:
     virtual void DoClear() override;
     virtual void DoDeleteOneItem(unsigned int pos) override;
 
-    virtual QScrollArea *QtGetScrollBarsContainer() const override;
+    virtual int DoListHitTest(const wxPoint& point) const override;
 
 #if wxUSE_CHECKLISTBOX
-    bool       m_hasCheckBoxes;
+    bool       m_hasCheckBoxes = false;
 #endif // wxUSE_CHECKLISTBOX
 
-    QListWidget *m_qtListWidget;
-
 private:
-    virtual void Init(); //common construction
-
     // Common part of both Create() overloads.
     void DoCreate(wxWindow* parent, long style);
 

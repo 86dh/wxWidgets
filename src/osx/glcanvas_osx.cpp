@@ -2,7 +2,6 @@
 // Name:        src/osx/glcanvas_osx.cpp
 // Purpose:     wxGLCanvas, for using OpenGL with wxWidgets under Macintosh
 // Author:      Stefan Csomor
-// Modified by:
 // Created:     1998-01-01
 // Copyright:   (c) Stefan Csomor
 // Licence:     wxWindows licence
@@ -350,13 +349,6 @@ wxGLAttributes& wxGLAttributes::PlatformDefaults()
     return *this;
 }
 
-wxGLAttributes& wxGLAttributes::Defaults()
-{
-    RGBA().Depth(16).DoubleBuffer().SampleBuffers(1).Samplers(4);
-    return *this;
-}
-
-
 // ----------------------------------------------------------------------------
 // wxGLContext
 // ----------------------------------------------------------------------------
@@ -417,9 +409,6 @@ wxGLContext::~wxGLContext()
 
 wxIMPLEMENT_CLASS(wxGLCanvas, wxWindow);
 
-wxBEGIN_EVENT_TABLE(wxGLCanvas, wxWindow)
-wxEND_EVENT_TABLE()
-
 wxGLCanvas::wxGLCanvas(wxWindow *parent,
                        const wxGLAttributes& dispAttrs,
                        wxWindowID id,
@@ -472,7 +461,6 @@ bool wxGLCanvas::Create(wxWindow *parent,
                         const wxString& name,
                         const wxPalette& WXUNUSED(palette))
 {
-    m_glFormat = nullptr;
     // Don't allow an empty list
     if ( !dispAttrs.GetGLAttrs() )
     {

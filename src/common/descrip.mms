@@ -143,7 +143,6 @@ OBJECTS1=fs_inet.obj,\
 		list.obj,\
 		log.obj,\
 		longlong.obj,\
-		memory.obj,\
 		menucmn.obj,\
 		mimecmn.obj,\
 		module.obj,\
@@ -224,7 +223,7 @@ OBJECTS3=listctrlcmn.obj,socketiohandler.obj,fdiodispatcher.obj,\
 		spinbtncmn.obj,scrolbarcmn.obj,colourdata.obj,fontdata.obj,\
 		valnum.obj,numformatter.obj,markupparser.obj,\
 		affinematrix2d.obj,richtooltipcmn.obj,persist.obj,time.obj,\
-		textmeasurecmn.obj,modalhook.obj,threadinfo.obj,\
+        textmeasurecmn.obj,modalhook.obj,\
 		addremovectrl.obj,notifmsgcmn.obj,graphcmn.obj,dcsvg.obj,\
 		dcgraph.obj,secretstore.obj,uilocale.obj,bmpbndl.obj
 
@@ -336,7 +335,6 @@ SOURCES = \
 		listctrlcmn.cpp,\
 		log.cpp,\
 		longlong.cpp,\
-		memory.cpp,\
 		menucmn.cpp,\
 		mimecmn.cpp,\
 		module.cpp,\
@@ -576,7 +574,6 @@ lboxcmn.obj : lboxcmn.cpp
 list.obj : list.cpp
 log.obj : log.cpp
 longlong.obj : longlong.cpp
-memory.obj : memory.cpp
 menucmn.obj : menucmn.cpp
 mimecmn.obj : mimecmn.cpp
 module.obj : module.cpp
@@ -721,7 +718,6 @@ persist.obj : persist.cpp
 time.obj : time.cpp
 textmeasurecmn.obj : textmeasurecmn.cpp
 modalhook.obj : modalhook.cpp
-threadinfo.obj : threadinfo.cpp
 addremovectrl.obj : addremovectrl.cpp
 notifmsgcmn.obj : notifmsgcmn.cpp
 graphcmn.obj : graphcmn.cpp

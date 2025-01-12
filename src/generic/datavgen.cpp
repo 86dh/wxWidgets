@@ -41,8 +41,6 @@
 #include "wx/dcbuffer.h"
 #include "wx/icon.h"
 #include "wx/itemattr.h"
-#include "wx/list.h"
-#include "wx/listimpl.cpp"
 #include "wx/imaglist.h"
 #include "wx/headerctrl.h"
 #include "wx/dnd.h"
@@ -185,6 +183,8 @@ wxTextCtrl *CreateEditorTextCtrl(wxWindow *parent, const wxRect& labelRect, cons
 
 void wxDataViewColumn::Init(int width, wxAlignment align, int flags)
 {
+    m_renderer->SetOwner(this);
+
     m_width =
     m_manuallySetWidth = width;
     m_minWidth = 0;
@@ -264,6 +264,11 @@ void wxDataViewColumn::SetSortOrder(bool ascending)
 {
     if ( !m_owner )
         return;
+
+    // If we only allow sorting by a single column, we need to reset any
+    // existing sort columns.
+    if ( !m_owner->IsMultiColumnSortAllowed() )
+        m_owner->ResetAllSortColumns();
 
     const int idx = m_owner->GetColumnIndex(this);
 
@@ -394,11 +399,9 @@ private:
         }
         else // not using this column for sorting yet
         {
-            // We will sort by this column only now, so reset all the
-            // previously used ones.
-            owner->ResetAllSortColumns();
-
-            // Sort the column
+            // Sort by this column: note that it can add it to the existing
+            // sort columns if multi-column sort is allowed, but by default it
+            // will replace the existing sort column (if any).
             col->SetSortOrder(true);
         }
 
@@ -822,6 +825,11 @@ public:
 
     int GetCountPerPage() const;
     int GetEndOfLastCol() const;
+
+    // Returns the position where the given column starts.
+    // The column must be valid.
+    int GetColumnStart(int column) const;
+
     unsigned int GetFirstVisibleRow() const;
     wxDataViewItem GetTopItem() const;
 
@@ -1288,7 +1296,7 @@ wxSize wxDataViewTextRenderer::GetSize() const
         if ( m_markupText )
         {
             wxDataViewCtrl* const view = GetView();
-            wxClientDC dc(view);
+            wxInfoDC dc(view);
             if ( GetAttr().HasFont() )
                 dc.SetFont(GetAttr().GetEffectiveFont(view->GetFont()));
 
@@ -1704,18 +1712,19 @@ public:
             m_dist_x -= indent;
             m_hint = new wxFrame( m_win->GetParent(), wxID_ANY, wxEmptyString,
                                         wxPoint(pos.x - m_dist_x, pos.y + 5 ),
-                                        ib.GetSize(),
+                                        wxSize(1, 1),
                                         wxFRAME_TOOL_WINDOW |
                                         wxFRAME_FLOAT_ON_PARENT |
                                         wxFRAME_NO_TASKBAR |
                                         wxNO_BORDER );
-            new wxBitmapCanvas( m_hint, ib, ib.GetSize() );
+            new wxBitmapCanvas( m_hint, ib, ib.GetLogicalSize() );
+            m_hint->SetClientSize(ib.GetLogicalSize());
+            m_hint->SetTransparent(128);
             m_hint->Show();
         }
         else
         {
             m_hint->Move( pos.x - m_dist_x, pos.y + 5  );
-            m_hint->SetTransparent( 128 );
         }
 
         return false;
@@ -2460,7 +2469,8 @@ wxBitmap wxDataViewMainWindow::CreateItemBitmap( unsigned int row, int &indent )
     }
     width -= indent;
 
-    wxBitmap bitmap( width, height );
+    wxBitmap bitmap;
+    bitmap.CreateWithLogicalSize( width, height, GetDPIScaleFactor() );
     wxMemoryDC dc( bitmap );
     dc.SetFont( GetFont() );
     dc.SetPen( *wxBLACK_PEN );
@@ -2524,7 +2534,6 @@ void wxDataViewMainWindow::OnPaint( wxPaintEvent &WXUNUSED(event) )
 
     // prepare the DC
     GetOwner()->PrepareDC( dc );
-    dc.SetFont( GetFont() );
 
     wxRect update = GetUpdateRegion().GetBox();
     m_owner->CalcUnscrolledPosition( update.x, update.y, &update.x, &update.y );
@@ -2597,8 +2606,9 @@ void wxDataViewMainWindow::OnPaint( wxPaintEvent &WXUNUSED(event) )
             const wxColour bgColour = m_owner->GetBackgroundColour();
 
             // Depending on the background, alternate row color
-            // will be 3% more dark or 50% brighter.
-            int alpha = bgColour.GetRGB() > 0x808080 ? 97 : 150;
+            // will be 3% more dark or 10% brighter -- because 3% brighter
+            // would be unnoticeable.
+            int alpha = bgColour.GetRGB() > 0x808080 ? 97 : 110;
             altRowColour = bgColour.ChangeLightness(alpha);
         }
 
@@ -2828,7 +2838,6 @@ void wxDataViewMainWindow::OnPaint( wxPaintEvent &WXUNUSED(event) )
             wxDataViewTreeNode *node = nullptr;
             wxDataViewItem dataitem;
             const int line_height = GetLineHeight(item);
-            bool hasValue = true;
 
             if (!IsVirtualList())
             {
@@ -2840,10 +2849,6 @@ void wxDataViewMainWindow::OnPaint( wxPaintEvent &WXUNUSED(event) )
                 }
 
                 dataitem = node->GetItem();
-
-                if ( !model->HasValue(dataitem, col->GetModelColumn()) )
-                    hasValue = false;
-
             }
             else
             {
@@ -2860,8 +2865,7 @@ void wxDataViewMainWindow::OnPaint( wxPaintEvent &WXUNUSED(event) )
                 state |= wxDATAVIEW_CELL_SELECTED;
 
             cell->SetState(state);
-            if (hasValue)
-                hasValue = cell->PrepareForItem(model, dataitem, col->GetModelColumn());
+            const bool hasValue = cell->PrepareForItem(model, dataitem, col->GetModelColumn());
 
             // draw the background
             if ( !selected )
@@ -3472,33 +3476,7 @@ void wxDataViewMainWindow::ScrollTo( int rows, int column )
     int sy = y ? GetLineStart( rows )/y : -1;
     int sx = -1;
     if( column != -1 && x )
-    {
-        wxRect rect = GetClientRect();
-        int colnum = 0;
-        int x_start, w = 0;
-        int xx, yy, xe;
-        m_owner->CalcUnscrolledPosition( rect.x, rect.y, &xx, &yy );
-        for (x_start = 0; colnum < column; colnum++)
-        {
-            wxDataViewColumn *col = GetOwner()->GetColumnAt(colnum);
-            if (col->IsHidden())
-                continue;      // skip it!
-
-            w = col->GetWidth();
-            x_start += w;
-        }
-
-        int x_end = x_start + w;
-        xe = xx + rect.width;
-        if( x_end > xe )
-        {
-            sx = ( xx + x_end - xe )/x;
-        }
-        if( x_start < xx )
-        {
-            sx = x_start/x;
-        }
-    }
+        sx = GetColumnStart(column) / x;
     m_owner->Scroll( sx, sy );
 }
 
@@ -3542,6 +3520,39 @@ int wxDataViewMainWindow::GetEndOfLastCol() const
             width += c->GetWidth();
     }
     return width;
+}
+
+int wxDataViewMainWindow::GetColumnStart(int column) const
+{
+    wxASSERT(column >= 0);
+    int sx = -1;
+
+    wxRect rect = GetClientRect();
+    int colnum = 0;
+    int x_start, w = 0;
+    int xx, yy, xe;
+    m_owner->CalcUnscrolledPosition(rect.x, rect.y, &xx, &yy);
+    for (x_start = 0; colnum < column; colnum++)
+    {
+        wxDataViewColumn* col = GetOwner()->GetColumnAt(colnum);
+        if (col->IsHidden())
+            continue;      // skip it!
+
+        w = col->GetWidth();
+        x_start += w;
+    }
+
+    int x_end = x_start + w;
+    xe = xx + rect.width;
+    if (x_end > xe)
+    {
+        sx = (xx + x_end - xe);
+    }
+    if (x_start < xx)
+    {
+        sx = x_start;
+    }
+    return sx;
 }
 
 unsigned int wxDataViewMainWindow::GetFirstVisibleRow() const
@@ -5596,7 +5607,10 @@ wxDataViewCtrl::~wxDataViewCtrl()
 
 #if wxUSE_ACCESSIBILITY
     SetAccessible(nullptr);
-    wxAccessible::NotifyEvent(wxACC_EVENT_OBJECT_DESTROY, this, wxOBJID_CLIENT, wxACC_SELF);
+    // There is no need to notify anybody if we're destroyed as part of
+    // application shutdown and doing it would just crash in this case.
+    if ( wxTheApp )
+        wxAccessible::NotifyEvent(wxACC_EVENT_OBJECT_DESTROY, this, wxOBJID_CLIENT, wxACC_SELF);
 #endif // wxUSE_ACCESSIBILITY
 }
 
@@ -5632,7 +5646,7 @@ bool wxDataViewCtrl::Create(wxWindow *parent,
     SetInitialSize(size);
 
 #ifdef __WXMAC__
-    MacSetClipChildren( true );
+    MacSetClipChildren();
 #endif
 
     m_clientArea = new wxDataViewMainWindow( this, wxID_ANY );
@@ -6445,12 +6459,33 @@ void wxDataViewCtrl::EnsureVisibleRowCol( int row, int column )
 
     int first = m_clientArea->GetFirstVisibleRow();
     int last = m_clientArea->GetLastFullyVisibleRow();
-    if( row < first )
+    if( row <= first )
+    {
         m_clientArea->ScrollTo( row, column );
+    }
     else if( row > last )
-        m_clientArea->ScrollTo( row - last + first, column );
-    else
-        m_clientArea->ScrollTo( first, column );
+    {
+        if ( !HasFlag(wxDV_VARIABLE_LINE_HEIGHT) )
+        {
+            // Simple case as we can directly find the item to scroll to.
+            m_clientArea->ScrollTo(row - last + first, column);
+        }
+        else
+        {
+            // calculate scroll position based on last visible item
+            const int itemStart = m_clientArea->GetLineStart(row);
+            const int itemHeight = m_clientArea->GetLineHeight(row);
+            const int clientHeight = m_clientArea->GetSize().y;
+            int scrollX, scrollY;
+            GetScrollPixelsPerUnit(&scrollX, &scrollY);
+            int scrollPosY =
+                (itemStart + itemHeight - clientHeight + scrollY - 1) / scrollY;
+            int scrollPosX = -1;
+            if (column != -1 && scrollX)
+                scrollPosX = m_clientArea->GetColumnStart(column) / scrollX;
+            Scroll(scrollPosX, scrollPosY);
+        }
+    }
 }
 
 void wxDataViewCtrl::EnsureVisible( const wxDataViewItem & item, const wxDataViewColumn * column )

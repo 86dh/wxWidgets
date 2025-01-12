@@ -183,7 +183,7 @@ public:
 #endif
 #if defined(SIZEOF_LONG_LONG) && SIZEOF_LONG_LONG == SIZEOF_LONG
         Arg_LongLongInt = Arg_LongInt,
-#elif defined(wxLongLong_t)
+#else
         Arg_LongLongInt = 0x0020,
 #endif
 
@@ -416,10 +416,8 @@ wxFORMAT_STRING_SPECIFIER(short int, wxFormatString::Arg_Int)
 wxFORMAT_STRING_SPECIFIER(short unsigned int, wxFormatString::Arg_Int)
 wxFORMAT_STRING_SPECIFIER(long int, wxFormatString::Arg_LongInt)
 wxFORMAT_STRING_SPECIFIER(long unsigned int, wxFormatString::Arg_LongInt)
-#ifdef wxLongLong_t
 wxFORMAT_STRING_SPECIFIER(wxLongLong_t, wxFormatString::Arg_LongLongInt)
 wxFORMAT_STRING_SPECIFIER(wxULongLong_t, wxFormatString::Arg_LongLongInt)
-#endif
 wxFORMAT_STRING_SPECIFIER(float, wxFormatString::Arg_Double)
 wxFORMAT_STRING_SPECIFIER(double, wxFormatString::Arg_Double)
 wxFORMAT_STRING_SPECIFIER(long double, wxFormatString::Arg_LongDouble)
@@ -528,7 +526,7 @@ struct wxArgNormalizerWchar : public wxArgNormalizer<T>
     #define wxArgNormalizerNative wxArgNormalizerUtf8
 #else // wxUSE_UNICODE_WCHAR
     #define wxArgNormalizerNative wxArgNormalizerWchar
-#endif // wxUSE_UNICODE_UTF8 // wxUSE_UNICODE_UTF8
+#endif // wxUSE_UNICODE_UTF8/wxUSE_UNICODE_WCHAR
 
 
 
@@ -543,7 +541,7 @@ struct wxArgNormalizerWithBuffer
 {
     typedef wxScopedCharTypeBuffer<CharType> CharBuffer;
 
-    wxArgNormalizerWithBuffer() {}
+    wxArgNormalizerWithBuffer() = default;
     wxArgNormalizerWithBuffer(const CharBuffer& buf,
                               const wxFormatString *fmt,
                               unsigned index)
@@ -824,11 +822,19 @@ struct wxArgNormalizerUtf8<const std::string&>
 #ifdef __cpp_lib_string_view
 template<>
 struct wxArgNormalizerUtf8<const std::string_view&>
-    : public wxArgNormalizerUtf8<const char*>
 {
     wxArgNormalizerUtf8(const std::string_view& v,
                         const wxFormatString *fmt, unsigned index)
-        : wxArgNormalizerUtf8<const char*>(v.data(), fmt, index) {}
+        : m_str{v}
+    {
+        wxASSERT_ARG_TYPE( fmt, index, wxFormatString::Arg_String );
+    }
+
+    const char* get() const { return m_str.c_str(); }
+
+    // We need to store this string to ensure that we use a NUL-terminated
+    // buffer, i.e. we can't use string_view data directly.
+    const std::string m_str;
 };
 #endif // __cpp_lib_string_view
 

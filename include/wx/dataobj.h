@@ -2,7 +2,6 @@
 // Name:        wx/dataobj.h
 // Purpose:     common data object classes
 // Author:      Vadim Zeitlin, Robert Roebling
-// Modified by:
 // Created:     26.05.99
 // Copyright:   (c) wxWidgets Team
 // Licence:     wxWindows licence
@@ -20,8 +19,10 @@
 
 #include "wx/string.h"
 #include "wx/bitmap.h"
-#include "wx/list.h"
 #include "wx/arrstr.h"
+
+#include <memory>
+#include <vector>
 
 // ============================================================================
 /*
@@ -248,8 +249,6 @@ private:
 // wxDataObject directly.
 // ----------------------------------------------------------------------------
 
-WX_DECLARE_EXPORTED_LIST(wxDataObjectSimple, wxSimpleDataObjectList);
-
 class WXDLLIMPEXP_CORE wxDataObjectComposite : public wxDataObject
 {
 public:
@@ -291,8 +290,8 @@ public:
 #endif
 
 private:
-    // the list of all (simple) data objects whose formats we support
-    wxSimpleDataObjectList m_dataObjects;
+    // all (simple) data objects whose formats we support
+    std::vector<std::unique_ptr<wxDataObjectSimple>> m_dataObjects;
 
     // the index of the preferred one (0 initially, so by default the first
     // one is the preferred)
@@ -373,18 +372,21 @@ public:
 
     // virtual functions which you may override if you want to provide text on
     // demand only - otherwise, the trivial default versions will be used
-    virtual size_t GetTextLength() const { return m_text.Len() + 1; }
     virtual wxString GetText() const { return m_text; }
     virtual void SetText(const wxString& text) { m_text = text; }
 
     // implement base class pure virtuals
     // ----------------------------------
 
-    // some platforms have 2 and not 1 format for text data
+    // non-MSW platforms need to support wxDF_TEXT in addition to wxDF_UNICODETEXT
 #if defined(wxNEEDS_UTF8_FOR_TEXT_DATAOBJ) || defined(wxNEEDS_UTF16_FOR_TEXT_DATAOBJ)
     virtual size_t GetFormatCount(Direction WXUNUSED(dir) = Get) const override { return 2; }
     virtual void GetAllFormats(wxDataFormat *formats,
-                               wxDataObjectBase::Direction WXUNUSED(dir) = Get) const override;
+                               wxDataObjectBase::Direction WXUNUSED(dir) = Get) const override
+    {
+        *formats++ = wxDataFormat(wxDF_UNICODETEXT);
+        *formats = wxDataFormat(wxDF_TEXT);
+    }
 
     virtual size_t GetDataSize() const override { return GetDataSize(GetPreferredFormat()); }
     virtual bool GetDataHere(void *buf) const override { return GetDataHere(GetPreferredFormat(), buf); }
@@ -411,6 +413,9 @@ public:
         return SetData(len, buf);
     }
 #endif // different wxTextDataObject implementations
+
+    wxDEPRECATED_MSG("Don't call nor override this function")
+    size_t GetTextLength() const { return m_text.Len() + 1; }
 
 private:
 #if defined(__WXQT__)

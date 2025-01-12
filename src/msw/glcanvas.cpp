@@ -2,7 +2,6 @@
 // Name:        src/msw/glcanvas.cpp
 // Purpose:     wxGLCanvas, for using OpenGL with wxWidgets under MS Windows
 // Author:      Julian Smart
-// Modified by:
 // Created:     04/01/98
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -171,7 +170,6 @@ inline T wxWGLProcCast(PROC proc)
 // compilers (e.g. MinGW) this needs to be done at makefiles level.
 #ifdef _MSC_VER
 #  pragma comment( lib, "opengl32" )
-#  pragma comment( lib, "glu32" )
 #endif
 
 //-----------------------------------------------------------------------------
@@ -530,13 +528,6 @@ wxGLAttributes& wxGLAttributes::PlatformDefaults()
     return *this;
 }
 
-wxGLAttributes& wxGLAttributes::Defaults()
-{
-    RGBA().Depth(16).DoubleBuffer().SampleBuffers(1).Samplers(4);
-    SetNeedsARB();
-    return *this;
-}
-
 // ----------------------------------------------------------------------------
 // wxGLContext
 // ----------------------------------------------------------------------------
@@ -648,11 +639,6 @@ wxEND_EVENT_TABLE()
 // wxGLCanvas construction
 // ----------------------------------------------------------------------------
 
-void wxGLCanvas::Init()
-{
-    m_hDC = nullptr;
-}
-
 wxGLCanvas::wxGLCanvas(wxWindow *parent,
                        const wxGLAttributes& dispAttrs,
                        wxWindowID id,
@@ -662,8 +648,6 @@ wxGLCanvas::wxGLCanvas(wxWindow *parent,
                        const wxString& name,
                        const wxPalette& palette)
 {
-    Init();
-
     (void)Create(parent, dispAttrs, id, pos, size, style, name, palette);
 }
 
@@ -676,8 +660,6 @@ wxGLCanvas::wxGLCanvas(wxWindow *parent,
                        const wxString& name,
                        const wxPalette& palette)
 {
-    Init();
-
     (void)Create(parent, id, pos, size, style, name, attribList, palette);
 }
 
@@ -752,6 +734,8 @@ bool wxGLCanvas::Create(wxWindow *parent,
 {
     if ( !CreateWindow(parent, id, pos, size, style, name) )
         return false;
+
+    MSWDisableComposited();
 
     // Choose a matching pixel format.
     // Need a PIXELFORMATDESCRIPTOR for SetPixelFormat()

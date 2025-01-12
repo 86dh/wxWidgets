@@ -2,7 +2,6 @@
 // Name:        src/osx/cocoa/nonownedwnd.mm
 // Purpose:     non owned window for cocoa
 // Author:      Stefan Csomor
-// Modified by:
 // Created:     2008-06-20
 // Copyright:   (c) Stefan Csomor
 // Licence:     wxWindows licence
@@ -68,6 +67,26 @@ wxPoint wxFromNSPoint( NSView* parent, const NSPoint& p )
     if ( parent == nullptr || ![ parent isFlipped ] )
         y = (int)(frame.size.height - ( p.y ));
     return wxPoint( x, y);
+}
+
+NSPoint wxToNSPointF( NSView* parent, const wxPoint2DDouble& p )
+{
+    NSRect frame = parent ? [parent bounds] : [wxOSXGetMenuScreen() frame];
+    double x = p.m_x;
+    double y = p.m_y;
+    if ( parent == nullptr || ![ parent isFlipped ] )
+        y = frame.size.height - y;
+    return NSMakePoint(x, y);
+}
+
+wxPoint2DDouble wxFromNSPointF( NSView* parent, const NSPoint& p )
+{
+    NSRect frame = parent ? [parent bounds] : [wxOSXGetMenuScreen() frame];
+    double x = p.x;
+    double y = p.y;
+    if ( parent == nullptr || ![ parent isFlipped ] )
+        y = frame.size.height - y;
+    return wxPoint2DDouble(x, y);
 }
 
 bool shouldHandleSelector(SEL selector)
@@ -367,8 +386,8 @@ extern int wxOSXGetIdFromSelector(SEL action );
         wxMenuItemImpl* impl = [nsMenuItem implementation];
         if ( impl )
         {
-            wxMenuItem* menuitem = impl->GetWXPeer();
-            return menuitem->GetMenu()->HandleCommandProcess(menuitem);
+            if ( wxMenuItem* menuitem = impl->GetWXPeer() )
+                return menuitem->GetMenu()->HandleCommandProcess(menuitem);
         }
     }
     // otherwise feed back command into common menubar
@@ -675,13 +694,7 @@ static void SendFullScreenWindowEvent(NSNotification* notification, bool fullscr
                                          doubleValue];
         if (newBackingScaleFactor != oldBackingScaleFactor)
         {
-            const wxSize oldDPI = wxWindow::OSXMakeDPIFromScaleFactor(oldBackingScaleFactor);
-            const wxSize newDPI = wxWindow::OSXMakeDPIFromScaleFactor(newBackingScaleFactor);
-
-            wxDPIChangedEvent event(oldDPI, newDPI);
-            event.SetEventObject(wxpeer);
-            wxpeer->HandleWindowEvent(event);
-
+            wxpeer->WXNotifyDPIChange(oldBackingScaleFactor, newBackingScaleFactor);
         }
 
         NSColorSpace *newColorSpace = [theWindow colorSpace];

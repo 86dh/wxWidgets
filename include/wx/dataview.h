@@ -489,20 +489,28 @@ enum wxDataViewColumnFlags
 class WXDLLIMPEXP_CORE wxDataViewColumnBase : public wxSettableHeaderColumn
 {
 public:
-    // ctor for the text columns: takes ownership of renderer
+    // Both ctors take ownership of the renderer pointer.
+    //
+    // Note that the derived class must call m_renderer->SetOwner(this) on its
+    // own because we can't do it here, as SetOwner() requires a pointer to the
+    // full column object and not just the base one.
+
+    // ctor for the text columns
     wxDataViewColumnBase(wxDataViewRenderer *renderer,
                          unsigned int model_column)
+        : m_renderer(renderer),
+          m_model_column(model_column)
     {
-        Init(renderer, model_column);
     }
 
     // ctor for the bitmap columns
     wxDataViewColumnBase(const wxBitmapBundle& bitmap,
                          wxDataViewRenderer *renderer,
                          unsigned int model_column)
-        : m_bitmap(bitmap)
+        : m_renderer(renderer),
+          m_model_column(model_column),
+          m_bitmap(bitmap)
     {
-        Init(renderer, model_column);
     }
 
     virtual ~wxDataViewColumnBase();
@@ -532,11 +540,7 @@ protected:
     wxDataViewRenderer      *m_renderer;
     int                      m_model_column;
     wxBitmapBundle           m_bitmap;
-    wxDataViewCtrl          *m_owner;
-
-private:
-    // common part of all ctors
-    void Init(wxDataViewRenderer *renderer, unsigned int model_column);
+    wxDataViewCtrl          *m_owner = nullptr;
 };
 
 // ---------------------------------------------------------
@@ -571,11 +575,11 @@ public:
     // -----------------
 
     wxDataViewColumn *PrependTextColumn( const wxString &label, unsigned int model_column,
-                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = -1,
+                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = wxCOL_WIDTH_DEFAULT,
                     wxAlignment align = wxALIGN_NOT,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *PrependIconTextColumn( const wxString &label, unsigned int model_column,
-                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = -1,
+                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = wxCOL_WIDTH_DEFAULT,
                     wxAlignment align = wxALIGN_NOT,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *PrependToggleColumn( const wxString &label, unsigned int model_column,
@@ -587,19 +591,19 @@ public:
                     wxAlignment align = wxALIGN_CENTER,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *PrependDateColumn( const wxString &label, unsigned int model_column,
-                    wxDataViewCellMode mode = wxDATAVIEW_CELL_ACTIVATABLE, int width = -1,
+                    wxDataViewCellMode mode = wxDATAVIEW_CELL_ACTIVATABLE, int width = wxCOL_WIDTH_DEFAULT,
                     wxAlignment align = wxALIGN_NOT,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *PrependBitmapColumn( const wxString &label, unsigned int model_column,
-                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = -1,
+                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = wxCOL_WIDTH_DEFAULT,
                     wxAlignment align = wxALIGN_CENTER,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *PrependTextColumn( const wxBitmap &label, unsigned int model_column,
-                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = -1,
+                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = wxCOL_WIDTH_DEFAULT,
                     wxAlignment align = wxALIGN_NOT,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *PrependIconTextColumn( const wxBitmap &label, unsigned int model_column,
-                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = -1,
+                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = wxCOL_WIDTH_DEFAULT,
                     wxAlignment align = wxALIGN_NOT,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *PrependToggleColumn( const wxBitmap &label, unsigned int model_column,
@@ -611,20 +615,20 @@ public:
                     wxAlignment align = wxALIGN_CENTER,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *PrependDateColumn( const wxBitmap &label, unsigned int model_column,
-                    wxDataViewCellMode mode = wxDATAVIEW_CELL_ACTIVATABLE, int width = -1,
+                    wxDataViewCellMode mode = wxDATAVIEW_CELL_ACTIVATABLE, int width = wxCOL_WIDTH_DEFAULT,
                     wxAlignment align = wxALIGN_NOT,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *PrependBitmapColumn( const wxBitmap &label, unsigned int model_column,
-                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = -1,
+                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = wxCOL_WIDTH_DEFAULT,
                     wxAlignment align = wxALIGN_CENTER,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
 
     wxDataViewColumn *AppendTextColumn( const wxString &label, unsigned int model_column,
-                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = -1,
+                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = wxCOL_WIDTH_DEFAULT,
                     wxAlignment align = wxALIGN_NOT,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *AppendIconTextColumn( const wxString &label, unsigned int model_column,
-                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = -1,
+                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = wxCOL_WIDTH_DEFAULT,
                     wxAlignment align = wxALIGN_NOT,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *AppendToggleColumn( const wxString &label, unsigned int model_column,
@@ -636,19 +640,19 @@ public:
                     wxAlignment align = wxALIGN_CENTER,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *AppendDateColumn( const wxString &label, unsigned int model_column,
-                    wxDataViewCellMode mode = wxDATAVIEW_CELL_ACTIVATABLE, int width = -1,
+                    wxDataViewCellMode mode = wxDATAVIEW_CELL_ACTIVATABLE, int width = wxCOL_WIDTH_DEFAULT,
                     wxAlignment align = wxALIGN_NOT,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *AppendBitmapColumn( const wxString &label, unsigned int model_column,
-                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = -1,
+                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = wxCOL_WIDTH_DEFAULT,
                     wxAlignment align = wxALIGN_CENTER,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *AppendTextColumn( const wxBitmap &label, unsigned int model_column,
-                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = -1,
+                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = wxCOL_WIDTH_DEFAULT,
                     wxAlignment align = wxALIGN_NOT,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *AppendIconTextColumn( const wxBitmap &label, unsigned int model_column,
-                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = -1,
+                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = wxCOL_WIDTH_DEFAULT,
                     wxAlignment align = wxALIGN_NOT,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *AppendToggleColumn( const wxBitmap &label, unsigned int model_column,
@@ -660,11 +664,11 @@ public:
                     wxAlignment align = wxALIGN_CENTER,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *AppendDateColumn( const wxBitmap &label, unsigned int model_column,
-                    wxDataViewCellMode mode = wxDATAVIEW_CELL_ACTIVATABLE, int width = -1,
+                    wxDataViewCellMode mode = wxDATAVIEW_CELL_ACTIVATABLE, int width = wxCOL_WIDTH_DEFAULT,
                     wxAlignment align = wxALIGN_NOT,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *AppendBitmapColumn( const wxBitmap &label, unsigned int model_column,
-                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = -1,
+                    wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = wxCOL_WIDTH_DEFAULT,
                     wxAlignment align = wxALIGN_CENTER,
                     int flags = wxDATAVIEW_COL_RESIZABLE );
 
@@ -1178,17 +1182,17 @@ public:
     virtual bool ClearColumns() override;
 
     wxDataViewColumn *AppendTextColumn( const wxString &label,
-          wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT,
-          int width = -1, wxAlignment align = wxALIGN_LEFT, int flags = wxDATAVIEW_COL_RESIZABLE );
+          wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = wxCOL_WIDTH_DEFAULT,
+          wxAlignment align = wxALIGN_LEFT, int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *AppendToggleColumn( const wxString &label,
-          wxDataViewCellMode mode = wxDATAVIEW_CELL_ACTIVATABLE,
-          int width = -1, wxAlignment align = wxALIGN_LEFT, int flags = wxDATAVIEW_COL_RESIZABLE );
+          wxDataViewCellMode mode = wxDATAVIEW_CELL_ACTIVATABLE, int width = wxCOL_WIDTH_DEFAULT,
+          wxAlignment align = wxALIGN_LEFT, int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *AppendProgressColumn( const wxString &label,
-          wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT,
-          int width = -1, wxAlignment align = wxALIGN_LEFT, int flags = wxDATAVIEW_COL_RESIZABLE );
+          wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = wxCOL_WIDTH_DEFAULT,
+          wxAlignment align = wxALIGN_LEFT, int flags = wxDATAVIEW_COL_RESIZABLE );
     wxDataViewColumn *AppendIconTextColumn( const wxString &label,
-          wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT,
-          int width = -1, wxAlignment align = wxALIGN_LEFT, int flags = wxDATAVIEW_COL_RESIZABLE );
+          wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT, int width = wxCOL_WIDTH_DEFAULT,
+          wxAlignment align = wxALIGN_LEFT, int flags = wxDATAVIEW_COL_RESIZABLE );
 
     void AppendItem( const wxVector<wxVariant> &values, wxUIntPtr data = 0 )
         { GetStore()->AppendItem( values, data ); }
@@ -1402,7 +1406,7 @@ class WXDLLIMPEXP_CORE wxDataViewTreeCtrl: public wxDataViewCtrl,
                                           public wxWithImages
 {
 public:
-    wxDataViewTreeCtrl() { }
+    wxDataViewTreeCtrl() = default;
     wxDataViewTreeCtrl(wxWindow *parent,
                        wxWindowID id,
                        const wxPoint& pos = wxDefaultPosition,

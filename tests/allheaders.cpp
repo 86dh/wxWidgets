@@ -45,9 +45,9 @@
 // We have to include this one first in order to check for wxUSE_XXX below.
 #include "wx/setup.h"
 
-// Normally this is done in include/wx/msw/gccpriv.h included from wx/defs.h,
-// but as we don't include it here, we need to do it manually to avoid warnings
-// inside the standard headers included from catch.hpp.
+// Normally this is done in wx/defs.h, but as we don't include it here, we need
+// to do it manually to avoid warnings inside the standard headers included
+// from catch.hpp.
 #if defined(__CYGWIN__) && defined(__WINDOWS__)
     #define __USE_W32_SOCKETS
 #endif
@@ -349,13 +349,14 @@
     GCC_TURN_OFF(padded)
 #endif // gcc >= 4.6
 
-// Do the same for clang too except here we don't bother with the individual
-// warnings and just enable the usual ones because clang mostly includes all
-// the useful warnings in them anyhow.
+// Do the same for clang too except here most of the useful warnings are
+// already included in -Wall, so we just need a few more.
 #ifdef CLANG_TURN_ON
     CLANG_TURN_ON(all)
     CLANG_TURN_ON(extra)
     CLANG_TURN_ON(pedantic)
+
+    CLANG_TURN_ON(shorten-64-to-32)
 #endif // clang
 
 
@@ -410,4 +411,14 @@ TEST_CASE("wxNO_IMPLICIT_WXSTRING_ENCODING", "[string]")
     // wxNO_IMPLICIT_WXSTRING_ENCODING must be set
     s = "Hello, implicit encoding";
 #endif
+
+    wxLogSysError(wxASCII_STR("Bogus error for testing"));
+
+    // Check that all translation macros expand to compilable
+    // code also when wxNO_IMPLICIT_WXSTRING_ENCODING is enabled.
+
+    _("some text");
+    wxPLURAL("singular", "plural", 2);
+    wxGETTEXT_IN_CONTEXT("context", "text");
+    wxGETTEXT_IN_CONTEXT_PLURAL("context", "singular", "plural", 3);
 }

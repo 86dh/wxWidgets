@@ -46,6 +46,13 @@ GdkWindow* wxGetTopLevelGDK();
 wxGUIEventLoop::wxGUIEventLoop()
 {
     m_exitcode = 0;
+    m_lastEvent = new GdkEvent;
+    memset(m_lastEvent, 0, sizeof(GdkEvent));
+}
+
+wxGUIEventLoop::~wxGUIEventLoop()
+{
+    delete m_lastEvent;
 }
 
 int wxGUIEventLoop::DoRun()
@@ -103,6 +110,15 @@ void wxGUIEventLoop::WakeUp()
     //       nothing when we don't...
     if ( wxTheApp )
         wxTheApp->WakeUpIdle();
+}
+
+bool wxGUIEventLoop::GTKIsSameAsLastEvent(const GdkEvent* ev, size_t size)
+{
+    if ( memcmp(m_lastEvent, ev, size) == 0 )
+        return true;
+
+    memcpy(m_lastEvent, ev, size);
+    return false;
 }
 
 // ----------------------------------------------------------------------------
@@ -385,18 +401,16 @@ void wxGUIEventLoop::DoYieldFor(long eventsToProcess)
     wxEventLoopBase::DoYieldFor(eventsToProcess);
 
     // put any unprocessed GDK events back in the queue
-    if ( !m_arrGdkEvents.IsEmpty() )
+    if ( !m_queuedGdkEvents.empty() )
     {
         GdkDisplay* disp = gdk_window_get_display(wxGetTopLevelGDK());
-        for (size_t i=0; i<m_arrGdkEvents.GetCount(); i++)
+        for ( GdkEvent* ev : m_queuedGdkEvents )
         {
-            GdkEvent* ev = (GdkEvent*)m_arrGdkEvents[i];
-
             // NOTE: gdk_display_put_event makes a copy of the event passed to it
             gdk_display_put_event(disp, ev);
             gdk_event_free(ev);
         }
 
-        m_arrGdkEvents.Clear();
+        m_queuedGdkEvents.clear();
     }
 }

@@ -25,7 +25,6 @@
 #include "wx/icon.h"
 #include "wx/artprov.h"
 #include "wx/colour.h"
-#include "wx/vector.h"
 
 #include "wx/xrc/xmlreshandler.h"
 
@@ -44,9 +43,9 @@ class WXDLLIMPEXP_FWD_CORE wxToolBar;
 class WXDLLIMPEXP_FWD_XML wxXmlDocument;
 class WXDLLIMPEXP_FWD_XML wxXmlNode;
 class WXDLLIMPEXP_FWD_XRC wxXmlSubclassFactory;
-class wxXmlSubclassFactories;
 class wxXmlResourceModule;
 class wxXmlResourceDataRecords;
+class wxXmlResourceInternal;
 
 // These macros indicate current version of XML resources (this information is
 // encoded in root node of XRC file as "version" property).
@@ -306,6 +305,13 @@ public:
     const wxString& GetDomain() const { return m_domain; }
     void SetDomain(const wxString& domain);
 
+    // Add a feature considered to be enabled: this will affect the subsequent
+    // calls to LoadDocument() and related functions and will keep any nodes
+    // using this string in their "feature" attribute (if any).
+    //
+    // Can be called multiple times to enable more than one feature.
+    void EnableFeature(const wxString& feature);
+
 
     // This function returns the wxXmlNode containing the definition of the
     // object with the given name or nullptr.
@@ -385,8 +391,7 @@ protected:
 #endif // wxUSE_FILESYSTEM
 
 private:
-    wxXmlResourceDataRecords& Data() { return *m_data; }
-    const wxXmlResourceDataRecords& Data() const { return *m_data; }
+    wxXmlResourceDataRecords& Data() const;
 
     // the real implementation of CreateResFromNode(): this should be only
     // called if node is non-null
@@ -410,8 +415,10 @@ private:
     long m_version;
 
     int m_flags;
-    wxVector<wxXmlResourceHandler*> m_handlers;
-    wxXmlResourceDataRecords *m_data;
+
+    // This object contains all private data of this class.
+    wxXmlResourceInternal* m_internal;
+
 #if wxUSE_FILESYSTEM
     wxFileSystem m_curFileSystem;
     wxFileSystem& GetCurFileSystem() { return m_curFileSystem; }
@@ -424,8 +431,6 @@ private:
     friend class wxXmlResourceModule;
     friend class wxIdRangeManager;
     friend class wxIdRange;
-
-    static wxXmlSubclassFactories *ms_subclassFactories;
 
     // singleton instance:
     static wxXmlResource *ms_instance;
@@ -483,7 +488,7 @@ public:
     wxXmlResourceHandlerImpl(wxXmlResourceHandler *handler);
 
     // Destructor.
-    virtual ~wxXmlResourceHandlerImpl() {}
+    virtual ~wxXmlResourceHandlerImpl() = default;
 
     // Creates an object (menu, dialog, control, ...) from an XML node.
     // Should check for validity.
@@ -502,12 +507,21 @@ public:
     bool IsOfClass(wxXmlNode *node, const wxString& classname) const override;
 
     bool IsObjectNode(const wxXmlNode *node) const override;
+
+    // Returns the name of the node, e.g. "object" or "sizeritem".
+    wxString GetNodeName(const wxXmlNode *node) const override;
+
+    // Returns the value of the given attribute under the node.
+    wxString GetNodeAttribute(const wxXmlNode *node,
+                              const wxString& attrName,
+                              const wxString& defaultValue) const override;
+
     // Gets node content from wxXML_ENTITY_NODE
     // The problem is, <tag>content<tag> is represented as
     // wxXML_ENTITY_NODE name="tag", content=""
     //    |-- wxXML_TEXT_NODE or
     //        wxXML_CDATA_SECTION_NODE name="" content="content"
-    wxString GetNodeContent(const wxXmlNode *node) override;
+    wxString GetNodeContent(const wxXmlNode *node) const override;
 
     wxXmlNode *GetNodeParent(const wxXmlNode *node) const override;
     wxXmlNode *GetNodeNext(const wxXmlNode *node) const override;
@@ -553,15 +567,20 @@ public:
     // Gets a float value from the parameter.
     float GetFloat(const wxString& param, float defaultv = 0) override;
 
-    // Gets colour in HTML syntax (#RRGGBB).
-    wxColour GetColour(const wxString& param, const wxColour& defaultv = wxNullColour) override;
+    // Gets colour from the parameter, returning one of the provided default
+    // values if it's not specified depending on whether we're using light or
+    // dark mode.
+    wxColour GetColour(const wxString& param,
+                       const wxColour& defaultLight = wxNullColour,
+                       const wxColour& defaultDark = wxNullColour) override;
 
     // Gets the size (may be in dialog units).
     wxSize GetSize(const wxString& param = wxT("size"),
                    wxWindow *windowToUse = nullptr) override;
 
     // Gets the position (may be in dialog units).
-    wxPoint GetPosition(const wxString& param = wxT("pos")) override;
+    wxPoint GetPosition(const wxString& param = wxT("pos"),
+                        wxWindow *windowToUse = nullptr) override;
 
     // Gets a dimension (may be in dialog units).
     wxCoord GetDimension(const wxString& param, wxCoord defaultv = 0,
@@ -611,11 +630,19 @@ public:
     wxImageList *GetImageList(const wxString& param = wxT("imagelist")) override;
 
 #if wxUSE_ANIMATIONCTRL
+    // Get all the animations defined in the given parameter which may contain
+    // more than one semicolon-separated paths.
+    wxAnimationBundle GetAnimations(const wxString& param = wxT("animation"),
+                                    wxAnimationCtrlBase* ctrl = nullptr) override;
+
+#if WXWIN_COMPATIBILITY_3_2
+    wxDEPRECATED_MSG("Use GetAnimations() instead")
     // Gets an animation creating it using the provided control (so that it
     // will be compatible with it) if any.
     wxAnimation* GetAnimation(const wxString& param = wxT("animation"),
                               wxAnimationCtrlBase* ctrl = nullptr) override;
-#endif
+#endif // WXWIN_COMPATIBILITY_3_2
+#endif // wxUSE_ANIMATIONCTRL
 
     // Gets a font.
     wxFont GetFont(const wxString& param = wxT("font"), wxWindow* parent = nullptr) override;
@@ -684,7 +711,7 @@ public:
     // Try to create instance of given class and return it, return nullptr on
     // failure:
     virtual wxObject *Create(const wxString& className) = 0;
-    virtual ~wxXmlSubclassFactory() {}
+    virtual ~wxXmlSubclassFactory() = default;
 };
 
 

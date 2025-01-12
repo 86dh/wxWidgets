@@ -2,7 +2,6 @@
 // Name:        wx/prntbase.h
 // Purpose:     Base classes for printing framework
 // Author:      Julian Smart
-// Modified by:
 // Created:     01/02/97
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -75,8 +74,8 @@ enum wxPreviewFrameModalityKind
 class WXDLLIMPEXP_CORE wxPrintFactory
 {
 public:
-    wxPrintFactory() {}
-    virtual ~wxPrintFactory() {}
+    wxPrintFactory() = default;
+    virtual ~wxPrintFactory() = default;
 
     virtual wxPrinterBase *CreatePrinter( wxPrintDialogData* data ) = 0;
 
@@ -159,8 +158,8 @@ public:
 class WXDLLIMPEXP_CORE wxPrintNativeDataBase: public wxObject
 {
 public:
-    wxPrintNativeDataBase();
-    virtual ~wxPrintNativeDataBase() {}
+    wxPrintNativeDataBase() = default;
+    virtual ~wxPrintNativeDataBase();
 
     virtual bool TransferTo( wxPrintData &data ) = 0;
     virtual bool TransferFrom( const wxPrintData &data ) = 0;
@@ -172,7 +171,14 @@ public:
     virtual bool Ok() const { return IsOk(); }
     virtual bool IsOk() const = 0;
 
-    int  m_ref;
+    // Internal implementation details, do not use.
+
+    // For historical reasons, this class doesn't use wxRefCounter, but provides
+    // the same methods, so that it could still be used with wxObjectDataPtr.
+    void IncRef() { m_ref++; }
+    void DecRef() { if ( !--m_ref) delete this; }
+
+    int  m_ref = 1;
 
 private:
     wxDECLARE_CLASS(wxPrintNativeDataBase);
@@ -277,6 +283,14 @@ public:
 
     virtual bool HasPage(int page);
     virtual bool OnPrintPage(int page) = 0;
+
+    // Return the total range of pages and fill in the provided parameter with
+    // the ranges of pages that should be printed (if it remains empty, all
+    // pages are printed).
+    virtual wxPrintPageRange GetPagesInfo(wxPrintPageRanges& ranges);
+
+    // Override GetPagesInfo() instead if more than one range of pages needs to
+    // be printed.
     virtual void GetPageInfo(int *minPage, int *maxPage, int *pageFrom, int *pageTo);
 
     virtual wxString GetTitle() const { return m_printoutTitle; }
@@ -379,6 +393,7 @@ private:
     void OnMouseWheel(wxMouseEvent& event);
 #endif // wxUSE_MOUSEWHEEL
     void OnIdle(wxIdleEvent& event);
+    void OnDPIChanged(wxDPIChangedEvent& event);
 
     wxPrintPreviewBase* m_printPreview;
 
@@ -633,6 +648,10 @@ public:
     virtual bool IsOk() const;
     virtual void SetOk(bool ok);
 
+    // This is an internal function used only by wxWidgets itself to update
+    // the rendered page when DPI has changed.
+    virtual void WXUpdateOnDPIChanged();
+
     ///////////////////////////////////////////////////////////////////////////
     // OVERRIDES
 
@@ -727,6 +746,8 @@ public:
     virtual bool Ok() const override { return IsOk(); }
     virtual bool IsOk() const override;
     virtual void SetOk(bool ok) override;
+
+    virtual void WXUpdateOnDPIChanged() override;
 
 private:
     wxPrintPreviewBase *m_pimpl;

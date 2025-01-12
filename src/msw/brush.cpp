@@ -2,7 +2,6 @@
 // Name:        src/msw/brush.cpp
 // Purpose:     wxBrush
 // Author:      Julian Smart
-// Modified by:
 // Created:     04/01/98
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -23,7 +22,6 @@
 #include "wx/brush.h"
 
 #ifndef WX_PRECOMP
-    #include "wx/list.h"
     #include "wx/utils.h"
     #include "wx/app.h"
     #include "wx/bitmap.h"
@@ -231,10 +229,6 @@ wxBrush::wxBrush(const wxBitmap& stipple)
     m_refData = new wxBrushRefData(stipple);
 }
 
-wxBrush::~wxBrush()
-{
-}
-
 // ----------------------------------------------------------------------------
 // wxBrush house keeping stuff
 // ----------------------------------------------------------------------------
@@ -284,7 +278,7 @@ wxBitmap *wxBrush::GetStipple() const
 
 WXHANDLE wxBrush::GetResourceHandle() const
 {
-    wxCHECK_MSG( IsOk(), FALSE, wxT("invalid brush") );
+    wxCHECK_MSG( IsOk(), nullptr, wxT("invalid brush") );
 
     return (WXHANDLE)M_BRUSHDATA->GetHBRUSH();
 }

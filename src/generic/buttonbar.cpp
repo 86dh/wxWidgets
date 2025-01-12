@@ -2,7 +2,6 @@
 // Name:        src/generic/buttonbar.cpp
 // Purpose:     wxButtonToolBar implementation
 // Author:      Julian Smart, after Robert Roebling, Vadim Zeitlin, SciTech
-// Modified by:
 // Created:     2006-04-13
 // Copyright:   (c) Julian Smart, Robert Roebling, Vadim Zeitlin,
 //              SciTech Software, Inc.
@@ -145,7 +144,7 @@ bool wxButtonToolBar::Create(wxWindow *parent,
     // Calculate the label height if necessary
     if (GetWindowStyle() & wxTB_TEXT)
     {
-        wxClientDC dc(this);
+        wxInfoDC dc(this);
         dc.SetFont(font);
         int w, h;
         dc.GetTextExtent(wxT("X"), & w, & h);
@@ -409,8 +408,7 @@ void wxButtonToolBar::DoLayout()
 
                     if (!tool->GetShortHelp().empty())
                     {
-                        wxClientDC dc(this);
-                        dc.SetFont(GetFont());
+                        wxInfoDC dc(this);
                         int tw, th;
                         dc.GetTextExtent(tool->GetShortHelp(), & tw, & th);
 
@@ -496,7 +494,6 @@ void wxButtonToolBar::OnPaint(wxPaintEvent& WXUNUSED(event))
 {
     wxPaintDC dc(this);
 
-    dc.SetFont(GetFont());
     dc.SetBackgroundMode(wxBRUSHSTYLE_TRANSPARENT);
 
     for ( wxToolBarToolsList::compatibility_iterator node = m_tools.GetFirst();

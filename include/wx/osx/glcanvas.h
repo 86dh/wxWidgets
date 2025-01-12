@@ -2,7 +2,6 @@
 // Name:        wx/osx/glcanvas.h
 // Purpose:     wxGLCanvas, for using OpenGL with wxWidgets under Macintosh
 // Author:      Stefan Csomor
-// Modified by:
 // Created:     1998-01-01
 // Copyright:   (c) Stefan Csomor
 // Licence:     wxWindows licence
@@ -60,6 +59,8 @@ private:
 class WXDLLIMPEXP_GL wxGLCanvas : public wxGLCanvasBase
 {
 public:
+    wxGLCanvas() = default;
+
     wxGLCanvas(wxWindow *parent,
                const wxGLAttributes& dispAttrs,
                wxWindowID id = wxID_ANY,
@@ -126,10 +127,9 @@ protected:
                               long style,
                   const wxString& name);
 
-    WXGLPixelFormat m_glFormat;
+    WXGLPixelFormat m_glFormat = nullptr;
     wxGLAttributes m_GLAttrs;
 
-    wxDECLARE_EVENT_TABLE();
     wxDECLARE_CLASS(wxGLCanvas);
 };
 

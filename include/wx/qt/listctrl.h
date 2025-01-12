@@ -17,7 +17,7 @@ class wxQtVirtualListModel;
 class WXDLLIMPEXP_CORE wxListCtrl: public wxListCtrlBase
 {
 public:
-    wxListCtrl();
+    wxListCtrl() = default;
 
     wxListCtrl(wxWindow *parent,
                wxWindowID id = wxID_ANY,
@@ -209,6 +209,8 @@ public:
     // Ensures this item is visible
     bool EnsureVisible(long item);
 
+    bool IsVisible(long item) const override;
+
     // Find an item whose label matches this string, starting from the item after 'start'
     // or the beginning if 'start' is -1.
     long FindItem(long start, const wxString& str, bool partial = false);
@@ -262,26 +264,27 @@ public:
     // data is arbitrary data to be passed to the sort function.
     bool SortItems(wxListCtrlCompare fn, wxIntPtr data);
 
-    virtual QWidget *GetHandle() const override;
+    // Sort indicator in header.
+    virtual void ShowSortIndicator(int col, bool ascending = true) override;
+    virtual int GetSortIndicator() const override;
+    virtual bool IsAscendingSortIndicator() const override;
+
+    wxQtListTreeWidget* GetQListTreeWidget() const;
 
 protected:
-    void Init();
-
     // Implement base class pure virtual methods.
     virtual long DoInsertColumn(long col, const wxListItem& info) override;
     void DoUpdateImages(int which) override;
 
-    bool              m_hasCheckBoxes;
+    bool m_hasCheckBoxes = false;
 
 private:
     // Allow access to OnGetItemXXX() method from the virtual model class.
     friend class wxQtVirtualListModel;
 
+    wxQtListModel *m_model = nullptr;
 
-    wxQtListTreeWidget *m_qtTreeWidget;
-    wxQtListModel *m_model;
-
-    wxDECLARE_DYNAMIC_CLASS( wxListCtrl );
+    wxDECLARE_DYNAMIC_CLASS(wxListCtrl);
 };
 
 #endif

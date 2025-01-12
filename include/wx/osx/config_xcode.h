@@ -2,7 +2,6 @@
 // Name:        wx/osx/config_xcode.h
 // Purpose:     configurations for xcode builds
 // Author:      Stefan Csomor
-// Modified by:
 // Created:     29.04.04
 // Copyright:   (c) wxWidgets team
 // Licence:     wxWindows licence
@@ -27,12 +26,10 @@
 #endif
 #define HAVE_VISIBILITY 1
 #define wxHAVE_PTHREAD_CLEANUP 1
-#define CONST_COMPATIBILITY 0
 #define WX_TIMEZONE timezone
 #define WX_SOCKLEN_T socklen_t
 #define SOCKOPTLEN_T socklen_t
 #define WX_STATFS_T struct statfs
-#define wxTYPE_SA_HANDLER int
 #define WX_GMTOFF_IN_TM 1
 #define HAVE_PW_GECOS 1
 #define HAVE_DLOPEN 1
@@ -110,12 +107,6 @@
 #define HAVE_LOCALE_T 1
 #define HAVE_XLOCALE_H 1
 #define wxHAS_KQUEUE 1
-
-#define PACKAGE_BUGREPORT "wx-dev@googlegroups.com"
-#define PACKAGE_NAME "wxWidgets"
-#define PACKAGE_STRING "wxWidgets 3.3.0"
-#define PACKAGE_TARNAME "wxwidgets"
-#define PACKAGE_VERSION "3.3.0"
 
 // for jpeg
 

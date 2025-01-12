@@ -2,7 +2,6 @@
 // Name:        samples/drawing/drawing.cpp
 // Purpose:     shows and tests wxDC features
 // Author:      Robert Roebling
-// Modified by:
 // Created:     04/01/98
 // Copyright:   (c) Robert Roebling
 // Licence:     wxWindows licence
@@ -26,6 +25,7 @@
     #include "wx/wx.h"
 #endif
 
+#include "wx/cmdline.h"
 #include "wx/colordlg.h"
 #include "wx/image.h"
 #include "wx/artprov.h"
@@ -79,8 +79,18 @@ static wxBitmap *gs_bmpNoMask = nullptr,
 class MyApp : public wxApp
 {
 public:
+    MyApp();
+
     // override base class virtuals
     // ----------------------------
+
+#if wxUSE_CMDLINE_PARSER
+    // Override to allow setting the appearance using command line options:
+    // this is useful for testing it under MSW as it can't be changed after
+    // program startup any more there.
+    virtual void OnInitCmdLine(wxCmdLineParser& parser) override;
+    virtual bool OnCmdLineParsed(wxCmdLineParser& parser) override;
+#endif // wxUSE_CMDLINE_PARSER
 
     // this one is called on application startup and is a good place for the app
     // initialization (doing it here and not in the ctor allows to have an error
@@ -89,10 +99,19 @@ public:
 
     virtual int OnExit() override { DeleteBitmaps(); return 0; }
 
+    // Get the menu ID corresponding to the initially selected appearance.
+    int GetInitialAppearanceMenuId() const { return m_initialAppearanceMenuId; }
+
+    // Helper function calling base class SetAppearance() and logging the result.
+    bool DoSetAppearance(int menuId);
+
 protected:
     void DeleteBitmaps();
 
     bool LoadImages();
+
+private:
+    int m_initialAppearanceMenuId;
 };
 
 class MyFrame;
@@ -107,6 +126,7 @@ public:
     void OnMouseMove(wxMouseEvent &event);
     void OnMouseDown(wxMouseEvent &event);
     void OnMouseUp(wxMouseEvent &event);
+    void OnMouseCaptureLost(wxMouseCaptureLostEvent &event);
 
     void ToShow(int show) { m_show = show; Refresh(); }
     int GetPage() { return m_show; }
@@ -159,6 +179,10 @@ protected:
     void DrawColour(wxDC& dc, const wxFont& mono, wxCoord x, const wxRect& r, const wxString& colourName, const wxColour& col);
 
     void DrawRegionsHelper(wxDC& dc, wxCoord x, bool firstTime);
+
+    // Remove the rubber band if it's currently shown and return true or just
+    // return false if we're not showing it.
+    bool StopRubberBanding();
 
 private:
     MyFrame *m_owner;
@@ -363,6 +387,13 @@ enum
     TransformMatrix_Reset,
 #endif // wxUSE_DC_TRANSFORM_MATRIX
 
+    Colour_AppearanceSystem,
+    Colour_AppearanceLight,
+    Colour_AppearanceDark,
+
+    Colour_DatabaseCSS,
+    Colour_DatabaseTraditional,
+
 #if wxUSE_COLOURDLG
     Colour_TextForeground,
     Colour_TextBackground,
@@ -393,6 +424,11 @@ wxIMPLEMENT_APP(MyApp);
 // ----------------------------------------------------------------------------
 // the application class
 // ----------------------------------------------------------------------------
+
+MyApp::MyApp()
+{
+    m_initialAppearanceMenuId = Colour_AppearanceSystem;
+}
 
 bool MyApp::LoadImages()
 {
@@ -452,6 +488,46 @@ bool MyApp::LoadImages()
     return true;
 }
 
+#if wxUSE_CMDLINE_PARSER
+
+void MyApp::OnInitCmdLine(wxCmdLineParser& parser)
+{
+    wxApp::OnInitCmdLine(parser);
+
+    parser.AddLongOption("appearance",
+                         R"(Set the appearance ("system", "light" or "dark"))");
+}
+
+bool MyApp::OnCmdLineParsed(wxCmdLineParser& parser)
+{
+    if ( !wxApp::OnCmdLineParsed(parser) )
+        return false;
+
+    wxString appearanceStr;
+    if ( parser.Found("appearance", &appearanceStr) )
+    {
+        if ( appearanceStr == "light" )
+        {
+            m_initialAppearanceMenuId = Colour_AppearanceLight;
+        }
+        else if ( appearanceStr == "dark" )
+        {
+            m_initialAppearanceMenuId = Colour_AppearanceDark;
+        }
+        else if ( appearanceStr != "system" )
+        {
+            wxLogError(R"(Invalid appearance value "%s".)", appearanceStr);
+            return false;
+        }
+
+        DoSetAppearance(m_initialAppearanceMenuId);
+    }
+
+    return true;
+}
+
+#endif // wxUSE_CMDLINE_PARSER
+
 // `Main program' equivalent: the program execution "starts" here
 bool MyApp::OnInit()
 {
@@ -492,6 +568,26 @@ void MyApp::DeleteBitmaps()
     wxDELETE(gs_bmp36);
 }
 
+bool MyApp::DoSetAppearance(int menuId)
+{
+    switch ( SetAppearance(Appearance(menuId - Colour_AppearanceSystem)) )
+    {
+        case wxApp::AppearanceResult::Failure:
+            wxLogStatus("Appearance couldn't be changed.");
+            break;
+
+        case wxApp::AppearanceResult::Ok:
+            wxLogStatus("Appearance changed successfully.");
+            return true;
+
+        case wxApp::AppearanceResult::CannotChange:
+            wxLogStatus("Appearance cannot be changed dynamically.");
+            break;
+    }
+
+    return false;
+}
+
 // ----------------------------------------------------------------------------
 // MyCanvas
 // ----------------------------------------------------------------------------
@@ -503,6 +599,7 @@ wxBEGIN_EVENT_TABLE(MyCanvas, wxScrolledWindow)
     EVT_MOTION (MyCanvas::OnMouseMove)
     EVT_LEFT_DOWN (MyCanvas::OnMouseDown)
     EVT_LEFT_UP (MyCanvas::OnMouseUp)
+    EVT_MOUSE_CAPTURE_LOST (MyCanvas::OnMouseCaptureLost)
 wxEND_EVENT_TABLE()
 
 #include "smile.xpm"
@@ -524,6 +621,13 @@ MyCanvas::MyCanvas(MyFrame *parent)
     m_useBuffer = false;
     m_showBBox = false;
     m_sizeDIP = wxSize(0, 0);
+
+    Bind(wxEVT_SYS_COLOUR_CHANGED, [this](wxSysColourChangedEvent& event) {
+        event.Skip();
+
+        if ( m_show == File_ShowSystemColours )
+            Refresh();
+    });
 }
 
 void MyCanvas::DrawTestBrushes(wxDC& dc)
@@ -1676,21 +1780,31 @@ void MyCanvas::DrawSystemColours(wxDC& dc)
     wxCoord x(FromDIP(10));
     wxRect r(textSize.GetWidth() + x, x, dc.FromDIP(100), lineHeight);
 
-    wxString title = "System colours";
+    dc.DrawText("System colours", x, r.y);
+    r.y += 2*lineHeight;
 
     const wxSystemAppearance appearance = wxSystemSettings::GetAppearance();
     const wxString appearanceName = appearance.GetName();
     if ( !appearanceName.empty() )
-        title += wxString::Format(" for \"%s\"", appearanceName);
-    if ( appearance.IsDark() )
-        title += " (using dark system theme)";
-    dc.DrawText(title, x, r.y);
-    r.y += 2*lineHeight;
-    dc.DrawText(wxString::Format("Window background is %s",
-                                 appearance.IsUsingDarkBackground() ? "dark"
-                                                                    : "light"),
-                x, r.y);
-    r.y += 3*lineHeight;
+    {
+        dc.DrawText(wxString::Format("System appearance: %s", appearanceName),
+                    x, r.y);
+        r.y += lineHeight;
+    }
+
+    auto const showDarkOrLight = [&](const char* what, bool dark)
+    {
+        dc.DrawText(wxString::Format("%s: %s", what, dark ? "dark" : "light"),
+                    x, r.y);
+        r.y += 1.5*lineHeight;
+    };
+
+    showDarkOrLight("System", appearance.IsSystemDark());
+    showDarkOrLight("App default", appearance.AreAppsDark());
+    showDarkOrLight("Current app", appearance.IsDark());
+    showDarkOrLight("Background", appearance.IsUsingDarkBackground());
+
+    r.y += lineHeight;
 
     dc.SetPen(*wxTRANSPARENT_PEN);
 
@@ -1759,10 +1873,12 @@ void MyCanvas::DrawDatabaseColours(wxDC& dc)
     dc.DrawText(title, x, r.y);
     r.y += 3*lineHeight;
 
-    const wxVector<wxString> names(wxTheColourDatabase->GetAllNames());
-    for (wxVector<wxString>::const_iterator p = names.begin(); p != names.end(); ++p)
+    wxVector<wxString> names(wxTheColourDatabase->GetAllNames());
+    std::sort(names.begin(), names.end());
+
+    for ( const auto& name : names )
     {
-        DrawColour(dc, mono, x, r, *p, wxTheColourDatabase->Find(*p));
+        DrawColour(dc, mono, x, r, name, wxTheColourDatabase->Find(name));
         r.y += lineHeight;
     }
 }
@@ -2050,11 +2166,10 @@ void MyCanvas::OnMouseMove(wxMouseEvent &event)
         m_currentpoint = wxPoint( xx , yy ) ;
         wxRect newrect ( m_anchorpoint , m_currentpoint ) ;
 
-        wxClientDC dc( this ) ;
-        PrepareDC( dc ) ;
+        wxOverlayDC dc(m_overlay, this);
+        PrepareDC(dc);
 
-        wxDCOverlay overlaydc( m_overlay, &dc );
-        overlaydc.Clear();
+        dc.Clear();
 #ifdef __WXMAC__
         dc.SetPen( *wxGREY_PEN );
         dc.SetBrush( wxColour( 192,192,192,64 ) );
@@ -2080,19 +2195,27 @@ void MyCanvas::OnMouseDown(wxMouseEvent &event)
     CaptureMouse() ;
 }
 
+bool MyCanvas::StopRubberBanding()
+{
+    if ( !m_rubberBand )
+        return false;
+
+    {
+        wxOverlayDC dc(m_overlay, this);
+        PrepareDC(dc);
+        dc.Clear();
+    }
+    m_overlay.Reset();
+    m_rubberBand = false;
+
+    return true;
+}
+
 void MyCanvas::OnMouseUp(wxMouseEvent &event)
 {
-    if ( m_rubberBand )
+    if ( StopRubberBanding() )
     {
         ReleaseMouse();
-        {
-            wxClientDC dc( this );
-            PrepareDC( dc );
-            wxDCOverlay overlaydc( m_overlay, &dc );
-            overlaydc.Clear();
-        }
-        m_overlay.Reset();
-        m_rubberBand = false;
 
         wxPoint endpoint = CalcUnscrolledPosition(event.GetPosition());
 
@@ -2104,6 +2227,13 @@ void MyCanvas::OnMouseUp(wxMouseEvent &event)
                          endpoint.x, endpoint.y);
         }
     }
+}
+
+void MyCanvas::OnMouseCaptureLost(wxMouseCaptureLostEvent& WXUNUSED(event))
+{
+    StopRubberBanding();
+
+    wxLogStatus(m_owner, "Mouse capture lost");
 }
 
 #if wxUSE_GRAPHICS_CONTEXT
@@ -2377,6 +2507,13 @@ MyFrame::MyFrame(const wxString& title)
 #endif // wxUSE_DC_TRANSFORM_MATRIX
 
     wxMenu *menuColour = new wxMenu;
+    menuColour->AppendRadioItem(Colour_AppearanceSystem, "Use &system appearance");
+    menuColour->AppendRadioItem(Colour_AppearanceLight, "Use &light appearance");
+    menuColour->AppendRadioItem(Colour_AppearanceDark, "Use &dark appearance");
+    menuColour->AppendSeparator();
+    menuColour->AppendRadioItem(Colour_DatabaseCSS, "&Use CSS colours");
+    menuColour->AppendRadioItem(Colour_DatabaseTraditional, "Use &traditional colours");
+    menuColour->AppendSeparator();
 #if wxUSE_COLOURDLG
     menuColour->Append( Colour_TextForeground, "Text &foreground..." );
     menuColour->Append( Colour_TextBackground, "Text &background..." );
@@ -2397,6 +2534,8 @@ MyFrame::MyFrame(const wxString& title)
     menuBar->Append(menuTransformMatrix, "&Transformation");
 #endif // wxUSE_DC_TRANSFORM_MATRIX
     menuBar->Append(menuColour, "&Colours");
+
+    menuBar->Check(wxGetApp().GetInitialAppearanceMenuId(), true);
 
     // ... and attach this menu bar to the frame
     SetMenuBar(menuBar);
@@ -2426,7 +2565,7 @@ MyFrame::MyFrame(const wxString& title)
     m_textureBackground = false;
 
     m_canvas = new MyCanvas( this );
-    m_canvas->SetScrollbars( 10, 10, 100, 240 );
+    m_canvas->SetScrollbars( 10, 10, 100, 450 );
 
     SetSize(FromDIP(wxSize(800, 700)));
     Center(wxBOTH);
@@ -2694,6 +2833,21 @@ void MyFrame::OnOption(wxCommandEvent& event)
             m_transform_rot = 0.0;
             break;
 #endif // wxUSE_DC_TRANSFORM_MATRIX
+
+        case Colour_AppearanceSystem:
+        case Colour_AppearanceLight:
+        case Colour_AppearanceDark:
+            if ( wxGetApp().DoSetAppearance(event.GetId()) )
+                Refresh();
+            break;
+
+        case Colour_DatabaseCSS:
+        case Colour_DatabaseTraditional:
+            wxTheColourDatabase->UseScheme(event.GetId() == Colour_DatabaseCSS
+                                                ? wxColourDatabase::CSS
+                                                : wxColourDatabase::Traditional);
+            Refresh();
+            break;
 
 #if wxUSE_COLOURDLG
         case Colour_TextForeground:

@@ -1042,6 +1042,46 @@ public:
     void Realize();
 
     /**
+        Returns the affirmative button for the sizer.
+
+        Affirmative buttons are those added with ID @c wxID_OK, @c wxID_YES
+        or @c wxID_SAVE. They can have other ID if they were added calling
+        wxStdDialogButtonSizer::SetAffirmativeButton.
+    */
+    wxButton* GetAffirmativeButton() const;
+
+    /**
+        Returns the apply button for the sizer.
+
+        Apply buttons are those added with ID @c wxID_APPLY.
+    */
+    wxButton* GetApplyButton() const;
+
+    /**
+        Returns the negative button for the sizer.
+
+        Negative buttons are those added with ID @c wxID_NO. They can have other
+        ID if they were added calling wxStdDialogButtonSizer::SetNegativeButton.
+    */
+    wxButton* GetNegativeButton() const;
+
+    /**
+        Returns the cancel button for the sizer.
+
+        Cancel buttons are those added with ID @c wxID_CANCEL or @c wxID_CLOSE.
+        They can have other ID if they were added calling
+        wxStdDialogButtonSizer::SetCancelButton.
+    */
+    wxButton* GetCancelButton() const;
+
+    /**
+        Returns the help button for the sizer.
+
+        Help buttons are those added with ID @c wxID_HELP or @c wxID_CONTEXT_HELP.
+    */
+    wxButton* GetHelpButton() const;
+
+    /**
         Sets the affirmative button for the sizer.
 
         This allows you to use identifiers other than the standard identifiers
@@ -1534,6 +1574,12 @@ public:
     wxSizerFlags& DoubleBorder(int direction = wxALL);
 
     /**
+        Sets the border in left and right directions having the default
+        border size.
+    */
+    wxSizerFlags& HorzBorder();
+
+    /**
         Sets the border in left and right directions having twice the default
         border size.
     */
@@ -1605,7 +1651,7 @@ public:
     wxSizerFlags& Right();
 
     /**
-        Set the @c wx_SHAPED flag which indicates that the elements should
+        Sets the @c wxSHAPED flag which indicates that the elements should
         always keep the fixed width to height ratio equal to its original value.
     */
     wxSizerFlags& Shaped();
@@ -1943,8 +1989,13 @@ public:
     and will delete it in the wxStaticBoxSizer destructor.
 
     Note that since wxWidgets 2.9.1 you are strongly encouraged to create the windows
-    which are added to wxStaticBoxSizer as children of wxStaticBox itself, see
-    this class documentation for more details.
+    which are added to wxStaticBoxSizer as children of wxStaticBox itself and
+    failure to do so will result in warning messages in debug builds, even if
+    creating them using the static box parent as parent still works too (but
+    note that items using different parents can't be used inside the same
+    sizer, i.e. all of them should be children either of the box itself or of
+    its parent and an assert will be triggered if this is not the case).
+    Please see wxStaticBox documentation for more details.
 
     Example of use of this class:
     @code

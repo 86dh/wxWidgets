@@ -2,7 +2,6 @@
 // Name:        wx/textctrl.h
 // Purpose:     wxTextAttr and wxTextCtrlBase class - the interface of wxTextCtrl
 // Author:      Vadim Zeitlin
-// Modified by:
 // Created:     13.07.99
 // Copyright:   (c) Vadim Zeitlin
 // Licence:     wxWindows licence
@@ -104,7 +103,17 @@ const wxTextCoord wxInvalidTextCoord    = -2;
 // wxTextCtrl file types
 // ----------------------------------------------------------------------------
 
-#define wxTEXT_TYPE_ANY     0
+// wxOSX and wxMSW support RTF in wxTextCtrl.
+#if defined(__WXOSX__) || (defined(__WXMSW__) && wxUSE_RICHEDIT)
+    #define wxHAS_TEXTCTRL_RTF
+#endif
+
+enum wxTextCtrlFileType
+{
+    wxTEXT_TYPE_ANY,
+    wxTEXT_TYPE_PLAIN,
+    wxTEXT_TYPE_RTF
+};
 
 // ----------------------------------------------------------------------------
 // wxTextCtrl::HitTest return values
@@ -600,14 +609,80 @@ private:
 };
 
 // ----------------------------------------------------------------------------
+// Search features for wxTextCtrl
+// ----------------------------------------------------------------------------
+
+// search options
+// --------------
+struct wxTextSearch
+{
+    explicit wxTextSearch(const wxString& text = wxString{}) : m_searchValue(text) {}
+
+    enum class Direction
+    {
+        Down,
+        Up
+    };
+
+    wxTextSearch& SearchValue(const wxString& value)
+    {
+        m_searchValue = value;
+        return *this;
+    }
+
+    wxTextSearch& MatchCase(bool matchCase = true)
+    {
+        m_matchCase = matchCase;
+        return *this;
+    }
+
+    wxTextSearch& MatchWholeWord(const bool matchWholeWord = true)
+    {
+        m_wholeWord = matchWholeWord;
+        return *this;
+    }
+
+    wxTextSearch& SearchDirection(const Direction direction)
+    {
+        m_direction = direction;
+        return *this;
+    }
+
+    wxTextSearch& Start(const long startPosition)
+    {
+        m_startingPosition = startPosition;
+        return *this;
+    }
+
+    wxString              m_searchValue;
+    long                  m_startingPosition = -1;
+    bool                  m_matchCase = false;
+    bool                  m_wholeWord = false;
+    Direction m_direction = Direction::Down;
+};
+
+// results from a search operation
+// -------------------------------
+struct wxTextSearchResult
+{
+    explicit operator bool() const { return m_start != wxNOT_FOUND; }
+    explicit wxTextSearchResult(long startPos, long endPos) :
+        m_start(startPos), m_end(endPos) {}
+    wxTextSearchResult() = default;
+
+    long m_start = wxNOT_FOUND;
+    long m_end = wxNOT_FOUND;
+};
+
+// ----------------------------------------------------------------------------
 // wxTextAreaBase: multiline text control specific methods
 // ----------------------------------------------------------------------------
 
 class WXDLLIMPEXP_CORE wxTextAreaBase
 {
 public:
-    wxTextAreaBase() { }
-    virtual ~wxTextAreaBase() { }
+    wxTextAreaBase() = default;
+    virtual ~wxTextAreaBase() = default;
 
     // lines access
     // ------------
@@ -681,6 +756,23 @@ public:
     virtual wxString GetValue() const = 0;
     virtual void SetValue(const wxString& value) = 0;
 
+    // Returns whether the RTF-related functions below can be used.
+    virtual bool IsRTFSupported() { return false; }
+
+    // Base class implementations simply assert, if IsRTFSupported() returns
+    // true, the port must override these functions to really implement them.
+    virtual wxString GetRTFValue() const;
+    virtual void SetRTFValue(const wxString& val);
+
+    // Searches for text.
+    // Base class implementations simply asserts,
+    // the port must override these functions to really implement them.
+    virtual wxTextSearchResult SearchText(const wxTextSearch& WXUNUSED(search)) const
+    {
+        wxFAIL_MSG("Text search not implemented for the current platform.");
+        return wxTextSearchResult();
+    }
+
 protected:
     // implementation of loading/saving
     virtual bool DoLoadFile(const wxString& file, int fileType);
@@ -714,7 +806,7 @@ class WXDLLIMPEXP_CORE wxTextCtrlIface : public wxTextAreaBase,
                                          public wxTextEntryBase
 {
 public:
-    wxTextCtrlIface() { }
+    wxTextCtrlIface() = default;
 
     // wxTextAreaBase overrides
     virtual wxString GetValue() const override
@@ -742,7 +834,7 @@ private:
 
 class WXDLLIMPEXP_CORE wxTextCtrlBase : public wxControl,
 #if wxHAS_TEXT_WINDOW_STREAM
-                                   public wxSTD streambuf,
+                                   public std::streambuf,
 #endif
                                    public wxTextAreaBase,
                                    public wxTextEntry
@@ -751,8 +843,8 @@ public:
     // creation
     // --------
 
-    wxTextCtrlBase() { }
-    virtual ~wxTextCtrlBase() { }
+    wxTextCtrlBase() = default;
+    virtual ~wxTextCtrlBase() = default;
 
 
     // more readable flag testing methods
@@ -820,6 +912,10 @@ public:
     {
         return GetCompositeControlsDefaultAttributes(variant);
     }
+
+    // Setting label for text control doesn't work portably, use SetValue() or
+    // ChangeValue() instead.
+    virtual void SetLabel(const wxString& label) override;
 
     virtual const wxTextEntry* WXGetTextEntry() const override { return this; }
 
@@ -965,12 +1061,12 @@ private:
 
 public:
     wxStreamToTextRedirector(wxTextCtrl *text)
-        : m_ostr(wxSTD cout)
+        : m_ostr(std::cout)
     {
         Init(text);
     }
 
-    wxStreamToTextRedirector(wxTextCtrl *text, wxSTD ostream *ostr)
+    wxStreamToTextRedirector(wxTextCtrl *text, std::ostream *ostr)
         : m_ostr(*ostr)
     {
         Init(text);
@@ -983,10 +1079,10 @@ public:
 
 private:
     // the stream we're redirecting
-    wxSTD ostream&   m_ostr;
+    std::ostream&   m_ostr;
 
     // the old streambuf (before we changed it)
-    wxSTD streambuf *m_sbufOld;
+    std::streambuf *m_sbufOld;
 };
 
 #endif // wxHAS_TEXT_WINDOW_STREAM

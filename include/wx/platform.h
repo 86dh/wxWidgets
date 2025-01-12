@@ -183,19 +183,6 @@
     #endif
 #endif /* ia64 */
 
-#if defined(_M_MPPC) || defined(__PPC__) || defined(__ppc__)
-    #ifndef __POWERPC__
-        #define __POWERPC__
-    #endif
-#endif /* alpha */
-
-#if defined(_M_ALPHA) || defined(__AXP__)
-    #ifndef __ALPHA__
-        #define __ALPHA__
-    #endif
-#endif /* alpha */
-
-
 /*
    Always define wxUSE_UNICODE as 1 for compatibility.
 
@@ -468,8 +455,20 @@
 #        ifndef MAC_OS_X_VERSION_10_16
 #           define MAC_OS_X_VERSION_10_16 101600
 #        endif
+         /*
+            Note that since macOS 11 there is no more "X" in the names.
+          */
 #        ifndef MAC_OS_VERSION_11_0
 #           define MAC_OS_VERSION_11_0 110000
+#        endif
+#        ifndef MAC_OS_VERSION_12_0
+#           define MAC_OS_VERSION_12_0 120000
+#        endif
+#        ifndef MAC_OS_VERSION_13_0
+#           define MAC_OS_VERSION_13_0 130000
+#        endif
+#        ifndef MAC_OS_VERSION_14_0
+#           define MAC_OS_VERSION_14_0 140000
 #        endif
 #        if __MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_13
 #            ifndef NSAppKitVersionNumber10_10

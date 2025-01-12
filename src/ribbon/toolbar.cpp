@@ -2,7 +2,6 @@
 // Name:        src/ribbon/toolbar.cpp
 // Purpose:     Ribbon-style tool bar
 // Author:      Peter Cawley
-// Modified by:
 // Created:     2009-07-06
 // Copyright:   (C) Peter Cawley
 // Licence:     wxWindows licence
@@ -17,7 +16,6 @@
 #include "wx/ribbon/art.h"
 #include "wx/ribbon/bar.h"
 #include "wx/dcbuffer.h"
-#include "wx/scopedptr.h"
 
 #ifndef WX_PRECOMP
 #endif
@@ -25,6 +23,8 @@
 #ifdef __WXMSW__
 #include "wx/msw/private.h"
 #endif
+
+#include <memory>
 
 class wxRibbonToolBarToolBase
 {
@@ -35,7 +35,7 @@ public:
     wxRect dropdown;
     wxPoint position;
     wxSize size;
-    wxObject* client_data;
+    wxObject* client_data = nullptr;
     int id;
     wxRibbonButtonKind kind;
     long state;
@@ -242,7 +242,7 @@ wxRibbonToolBarToolBase* wxRibbonToolBar::InsertTool(
     wxASSERT(bitmap.IsOk());
 
     // Create the wxRibbonToolBarToolBase with parameters
-    wxScopedPtr<wxRibbonToolBarToolBase> tool(new wxRibbonToolBarToolBase);
+    std::unique_ptr<wxRibbonToolBarToolBase> tool(new wxRibbonToolBarToolBase);
     tool->id = tool_id;
     tool->bitmap = bitmap;
     if(bitmap_disabled.IsOk())
@@ -385,6 +385,7 @@ bool wxRibbonToolBar::DeleteToolByPos(size_t pos)
             }
             return true;
         }
+        pos -= tool_count+1;
     }
     return false;
 }
@@ -425,6 +426,7 @@ wxRibbonToolBarToolBase* wxRibbonToolBar::GetToolByPos(size_t pos)const
         {
             return nullptr;
         }
+        pos -= tool_count+1;
     }
     return nullptr;
 }
@@ -530,7 +532,7 @@ wxRect wxRibbonToolBar::GetToolRect(int tool_id)const
 {
     size_t group_count = m_groups.GetCount();
     size_t g, t;
-    int pos = 0;
+
     for(g = 0; g < group_count; ++g)
     {
         wxRibbonToolBarToolGroup* group = m_groups.Item(g);
@@ -542,9 +544,7 @@ wxRect wxRibbonToolBar::GetToolRect(int tool_id)const
             {
                 return wxRect(group->position + tool->position, tool->size);
             }
-            ++pos;
         }
-        ++pos; // Increment pos for group separator.
     }
     return wxRect();
 }
@@ -1092,12 +1092,7 @@ void wxRibbonToolBar::OnMouseMove(wxMouseEvent& evt)
     }
 #endif
 
-    if(new_hover && new_hover->state & wxRIBBON_TOOLBAR_TOOL_DISABLED)
-    {
-        m_hover_tool = new_hover;
-        new_hover = nullptr; // A disabled tool can not be hilighted
-    }
-    else if(new_hover != m_hover_tool)
+    if(new_hover != m_hover_tool)
     {
         if(m_hover_tool)
         {
@@ -1105,6 +1100,10 @@ void wxRibbonToolBar::OnMouseMove(wxMouseEvent& evt)
                 | wxRIBBON_TOOLBAR_TOOL_ACTIVE_MASK);
         }
         m_hover_tool = new_hover;
+
+        if(new_hover && new_hover->state & wxRIBBON_TOOLBAR_TOOL_DISABLED)
+            new_hover = nullptr; // A disabled tool can not be highlighted
+
         if(new_hover)
         {
             long what = wxRIBBON_TOOLBAR_TOOL_NORMAL_HOVERED;
@@ -1203,6 +1202,7 @@ void wxRibbonToolBar::OnMouseEnter(wxMouseEvent& evt)
 {
     if(m_active_tool && !evt.LeftIsDown())
     {
+        m_active_tool->state &= ~wxRIBBON_TOOLBAR_TOOL_ACTIVE_MASK;
         m_active_tool = nullptr;
     }
 }

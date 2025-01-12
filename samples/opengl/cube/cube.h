@@ -2,7 +2,6 @@
 // Name:        cube.h
 // Purpose:     wxGLCanvas demo program
 // Author:      Julian Smart
-// Modified by:
 // Created:     04/01/98
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -65,7 +64,7 @@ private:
 class TestGLCanvas : public wxGLCanvas
 {
 public:
-    TestGLCanvas(wxWindow *parent, int *attribList = nullptr);
+    TestGLCanvas(wxWindow *parent, bool useStereo);
 
 private:
     void OnPaint(wxPaintEvent& event);

@@ -2,7 +2,6 @@
 // Name:        wx/treebook.h
 // Purpose:     wxTreebook: wxNotebook-like control presenting pages in a tree
 // Author:      Evgeniy Tarassov, Vadim Zeitlin
-// Modified by:
 // Created:     2005-09-15
 // Copyright:   (c) 2005 Vadim Zeitlin <vadim@wxwidgets.org>
 // Licence:     wxWindows licence
@@ -15,8 +14,7 @@
 
 #if wxUSE_TREEBOOK
 
-#include "wx/bookctrl.h"
-#include "wx/containr.h"
+#include "wx/compositebookctrl.h"
 #include "wx/treebase.h"        // for wxTreeItemId
 #include "wx/vector.h"
 
@@ -29,7 +27,7 @@ class WXDLLIMPEXP_FWD_CORE wxTreeEvent;
 // wxTreebook
 // ----------------------------------------------------------------------------
 
-class WXDLLIMPEXP_CORE wxTreebook : public wxNavigationEnabled<wxBookCtrlBase>
+class WXDLLIMPEXP_CORE wxTreebook : public wxCompositeBookCtrlBase
 {
 public:
     // Constructors and such

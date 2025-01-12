@@ -2,7 +2,6 @@
 // Name:        src/common/bookctrl.cpp
 // Purpose:     wxBookCtrlBase implementation
 // Author:      Vadim Zeitlin
-// Modified by:
 // Created:     19.08.03
 // Copyright:   (c) 2003 Vadim Zeitlin <vadim@wxwidgets.org>
 // Licence:     wxWindows licence
@@ -22,9 +21,9 @@
 
 #if wxUSE_BOOKCTRL
 
-#include "wx/imaglist.h"
+#include "wx/compositebookctrl.h"
 
-#include "wx/bookctrl.h"
+#include "wx/imaglist.h"
 
 // ============================================================================
 // implementation
@@ -402,11 +401,15 @@ wxBookCtrlBase::InsertPage(size_t nPage,
 bool wxBookCtrlBase::DeletePage(size_t nPage)
 {
     wxWindow *page = DoRemovePage(nPage);
-    if ( !(page || AllowNullPage()) )
-        return false;
 
-    // deleting null pointer is harmless
-    delete page;
+    if ( !page )
+    {
+        // Normally a null page indicates a problem, but it can be valid if
+        // null pages are allowed in the control.
+        return AllowNullPage();
+    }
+
+    page->Destroy();
 
     return true;
 }
@@ -556,5 +559,11 @@ int wxBookCtrlBase::DoSetSelection(size_t n, int flags)
 }
 
 wxIMPLEMENT_DYNAMIC_CLASS(wxBookCtrlEvent, wxNotifyEvent);
+
+// Implement the trivial ctor here to ensure it's emitted here and exported
+// from the DLL instead of having an inline version of it which may result in
+// link errors if it happens to be instantiated both inside and outside of the
+// DLL, see #22805.
+wxCompositeBookCtrlBase::wxCompositeBookCtrlBase() = default;
 
 #endif // wxUSE_BOOKCTRL

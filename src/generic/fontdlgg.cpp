@@ -2,7 +2,6 @@
 // Name:        src/generic/fontdlgg.cpp
 // Purpose:     Generic font dialog
 // Author:      Julian Smart
-// Modified by:
 // Created:     04/01/98
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -73,8 +72,6 @@ void wxFontPreviewer::OnPaint(wxPaintEvent& WXUNUSED(event))
 
     if ( font.IsOk() )
     {
-        dc.SetFont(font);
-        dc.SetTextForeground(GetForegroundColour());
         dc.SetClippingRegion(2, 2, size.x-4, size.y-4);
         dc.DrawText(_("ABCDEFGabcdefg12345"),
                      10, (size.y - dc.GetTextExtent(wxT("X")).y)/2);

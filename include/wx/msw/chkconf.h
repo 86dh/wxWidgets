@@ -149,19 +149,6 @@
 #    define wxUSE_CRASHREPORT 0
 #endif /* compiler doesn't support SEH */
 
-#if defined(__GNUWIN32__)
-    /* These don't work as expected for mingw32 and cygwin32 */
-#   undef  wxUSE_MEMORY_TRACING
-#   define wxUSE_MEMORY_TRACING            0
-
-#   undef  wxUSE_GLOBAL_MEMORY_OPERATORS
-#   define wxUSE_GLOBAL_MEMORY_OPERATORS   0
-
-#   undef  wxUSE_DEBUG_NEW_ALWAYS
-#   define wxUSE_DEBUG_NEW_ALWAYS          0
-
-#endif /* __GNUWIN32__ */
-
 /* MinGW32 doesn't provide wincred.h defining the API needed by this */
 #ifdef __MINGW32_TOOLCHAIN__
     #undef wxUSE_SECRETSTORE
@@ -315,6 +302,15 @@
 #       endif
 #   endif
 
+#   if wxUSE_CLIPBOARD
+#       ifdef wxABORT_ON_CONFIG_ERROR
+#           error "wxUSE_CLIPBOARD requires wxUSE_OLE"
+#       else
+#           undef wxUSE_CLIPBOARD
+#           define wxUSE_CLIPBOARD 0
+#       endif
+#   endif
+
 #   if wxUSE_DRAG_AND_DROP
 #       ifdef wxABORT_ON_CONFIG_ERROR
 #           error "wxUSE_DRAG_AND_DROP requires wxUSE_OLE"
@@ -343,12 +339,12 @@
 #           define wxUSE_MEDIACTRL 0
 #       endif
 #   endif
-#    if wxUSE_WEBVIEW
+#    if wxUSE_WEBVIEW && wxUSE_WEBVIEW_IE
 #       ifdef wxABORT_ON_CONFIG_ERROR
-#           error "wxWebView requires wxActiveXContainer under MSW"
+#           error "wxWebViewIE requires wxActiveXContainer under MSW"
 #       else
-#           undef wxUSE_WEBVIEW
-#           define wxUSE_WEBVIEW 0
+#           undef wxUSE_WEBVIEW_IE
+#           define wxUSE_WEBVIEW_IE 0
 #       endif
 #   endif
 #endif /* !wxUSE_ACTIVEX */

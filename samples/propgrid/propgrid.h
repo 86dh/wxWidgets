@@ -2,7 +2,6 @@
 // Name:        samples/propgrid/propgrid.h
 // Purpose:     wxPropertyGrid sample
 // Author:      Jaakko Salli
-// Modified by:
 // Created:     2004-09-25
 // Copyright:   (c) Jaakko Salli
 // Licence:     wxWindows licence
@@ -10,36 +9,6 @@
 
 #ifndef _WX_SAMPLES_PROPGRID_PROPGRID_H_
 #define _WX_SAMPLES_PROPGRID_PROPGRID_H_
-
-// -----------------------------------------------------------------------
-
-class wxAdvImageFileProperty : public wxFileProperty
-{
-    WX_PG_DECLARE_PROPERTY_CLASS(wxAdvImageFileProperty)
-public:
-
-    wxAdvImageFileProperty( const wxString& label = wxPG_LABEL,
-                            const wxString& name = wxPG_LABEL,
-                            const wxString& value = wxEmptyString );
-    virtual ~wxAdvImageFileProperty ();
-
-    virtual void OnSetValue() override;  // Override to allow image loading.
-
-    virtual bool IntToValue( wxVariant& variant, int number, int argFlags = 0 ) const override;
-    virtual bool OnEvent( wxPropertyGrid* propgrid, wxWindow* primary, wxEvent& event ) override;
-    virtual wxSize OnMeasureImage( int item ) const override;
-    virtual void OnCustomPaint( wxDC& dc,
-                                const wxRect& rect, wxPGPaintData& paintdata ) override;
-
-    void LoadThumbnails( size_t n );
-
-protected:
-    wxImage*    m_pImage; // Temporary thumbnail data.
-
-    static wxPGChoices ms_choices;
-
-    int m_index; // Index required for choice behaviour.
-};
 
 // -----------------------------------------------------------------------
 
@@ -128,10 +97,10 @@ enum
 class FormMain : public wxFrame
 {
 public:
-    FormMain(const wxString& title, const wxPoint& pos, const wxSize& size );
+    FormMain(const wxString& title);
     ~FormMain();
 
-    wxPropertyGridManager*  m_pPropGridManager;
+    wxPropertyGridManager*  m_propGridManager;
     wxPropertyGrid*     m_propGrid;
 
     wxTextCtrl*     m_tcPropLabel;
@@ -142,7 +111,7 @@ public:
     wxLogWindow*    m_logWindow;
 #endif
 
-    wxPGEditor*     m_pSampleMultiButtonEditor;
+    wxPGEditor*     m_sampleMultiButtonEditor;
     wxPGChoices     m_combinedFlags;
 
     wxMenuItem*     m_itemCatColours;
@@ -262,8 +231,6 @@ public:
     void OnShowPopup( wxCommandEvent& event );
 
     void AddTestProperties( wxPropertyGridPage* pg );
-
-    bool RunTests( bool fullTest, bool interactive = false );
 
 private:
     wxDECLARE_EVENT_TABLE();

@@ -24,10 +24,12 @@
     #include "wx/settings.h"
     #include "wx/msgdlg.h"
     #include "wx/math.h"
+    #include "wx/module.h"
 #endif
 
 #include "wx/display.h"
 #include "wx/dnd.h"
+#include "wx/evtloop.h"
 #include "wx/tooltip.h"
 #include "wx/caret.h"
 #include "wx/fontutil.h"
@@ -35,6 +37,9 @@
 #include "wx/sysopt.h"
 #ifdef __WXGTK3__
     #include "wx/gtk/dc.h"
+#endif
+#ifdef __WINDOWS__
+    #include <gdk/gdkwin32.h>
 #endif
 
 #include <ctype.h>
@@ -54,6 +59,12 @@ using namespace wxGTKImpl;
 typedef guint KeySym;
 #endif
 
+// Use libxkbcommon for key code translation if we need and have it.
+#if (defined (GDK_WINDOWING_X11) || defined (GDK_WINDOWING_WAYLAND)) && defined (HAVE_XKBCOMMON)
+#define wxHAS_XKB
+#include <xkbcommon/xkbcommon.h>
+#endif
+
 #ifdef __WXGTK4__
 #define wxGTK_HAS_COMPOSITING_SUPPORT 0
 #else
@@ -64,6 +75,8 @@ typedef guint KeySym;
 #ifndef PANGO_VERSION_CHECK
     #define PANGO_VERSION_CHECK(a,b,c) 0
 #endif
+
+constexpr const char* TRACE_MOUSE = "mouse";
 
 //-----------------------------------------------------------------------------
 // documentation on internals
@@ -222,8 +235,123 @@ static wxWindowGTK *gs_deferredFocusOut = nullptr;
 
 // global variables because GTK+ DnD want to have the
 // mouse event that caused it
-GdkEvent    *g_lastMouseEvent = nullptr;
+GdkEvent    *g_lastMouseEvent = nullptr; // use SetLastMouseEvent below
 int          g_lastButtonNumber = 0;
+
+namespace wxGTKImpl
+{
+
+// Small RAII helper setting g_lastMouseEvent until the scope exit.
+class SetLastMouseEvent
+{
+public:
+    explicit SetLastMouseEvent(GdkEventButton* event)
+    {
+        g_lastMouseEvent = reinterpret_cast<GdkEvent*>(event);
+    }
+
+    explicit SetLastMouseEvent(GdkEventMotion* event)
+    {
+        g_lastMouseEvent = reinterpret_cast<GdkEvent*>(event);
+    }
+
+    ~SetLastMouseEvent()
+    {
+        g_lastMouseEvent = nullptr;
+    }
+};
+
+
+wxWindowGTK* g_windowUnderMouse = nullptr;
+
+bool SetWindowUnderMouse(wxWindowGTK* win)
+{
+    if ( g_windowUnderMouse == win )
+        return false;
+
+    g_windowUnderMouse = win;
+
+    return true;
+}
+
+template <typename EventType>
+gboolean SendEnterLeaveEvents(wxWindowGTK* win, EventType* gdk_event);
+
+} // namespace wxGTKImpl
+
+#ifdef wxHAS_XKB
+namespace
+{
+
+// Global data used for raw key codes translation.
+class XkbData
+{
+public:
+    XkbData() = default;
+
+    // Get the state pointer allocating it on demand if necessary.
+    xkb_state* GetState()
+    {
+        if ( !m_state )
+        {
+            m_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+            xkb_rule_names names{};
+            names.layout = "us";
+            m_keymap = xkb_keymap_new_from_names(m_ctx, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
+            m_state = xkb_state_new(m_keymap);
+        }
+
+        return m_state;
+    }
+
+    // Called by wxXKBModule::OnExit() to free all our data.
+    void Free()
+    {
+        if ( m_state )
+        {
+            xkb_state_unref(m_state);
+            m_state = nullptr;
+        }
+
+        if ( m_keymap )
+        {
+            xkb_keymap_unref(m_keymap);
+            m_keymap = nullptr;
+        }
+
+        if ( m_ctx )
+        {
+            xkb_context_unref(m_ctx);
+            m_ctx = nullptr;
+        }
+    }
+
+private:
+    xkb_context *m_ctx = nullptr;
+    xkb_keymap *m_keymap = nullptr;
+    xkb_state *m_state = nullptr;
+
+    wxDECLARE_NO_COPY_CLASS(XkbData);
+};
+
+XkbData gs_xkbData;
+
+} // anonymous namespace
+
+// wxXKBModule: used for freeing global xkb data
+class wxXKBModule : public wxModule
+{
+public:
+    bool OnInit() override { return true; }
+    void OnExit() override { gs_xkbData.Free(); }
+
+private:
+    wxDECLARE_DYNAMIC_CLASS(wxXKBModule);
+};
+
+wxIMPLEMENT_DYNAMIC_CLASS(wxXKBModule, wxModule);
+
+#endif // wxHAS_XKB
 
 #ifdef __WXGTK3__
 static GList* gs_sizeRevalidateList;
@@ -237,8 +365,9 @@ wxRecursionGuardFlag g_inSizeAllocate = 0;
 
 #ifdef wxGTK_HAS_GESTURES_SUPPORT
 
-#include "wx/hashmap.h"
 #include "wx/private/extfield.h"
+
+#include <unordered_map>
 
 namespace
 {
@@ -270,6 +399,7 @@ public:
     int                  m_activeGestures;
     wxPoint              m_lastTouchPoint;
     GdkEventSequence*    m_touchSequence;
+    bool                 m_rawTouchEvents;
 
     GtkGesture* m_vertical_pan_gesture;
     GtkGesture* m_horizontal_pan_gesture;
@@ -278,9 +408,7 @@ public:
     GtkGesture* m_long_press_gesture;
 };
 
-WX_DECLARE_HASH_MAP(wxWindow*, wxWindowGesturesData*,
-                    wxPointerHash, wxPointerEqual,
-                    wxWindowGesturesMap);
+using wxWindowGesturesMap = std::unordered_map<wxWindow*, wxWindowGesturesData*>;
 
 typedef wxExternalField<wxWindow,
                         wxWindowGesturesData,
@@ -516,10 +644,7 @@ draw_border(GtkWidget* widget, GdkEventExpose* gdk_event, wxWindow* win)
     {
 #ifdef __WXGTK3__
         //TODO: wxBORDER_RAISED/wxBORDER_SUNKEN
-        GtkStyleContext* sc;
-        if (win->HasFlag(wxHSCROLL | wxVSCROLL))
-            sc = gtk_widget_get_style_context(wxGTKPrivate::GetTreeWidget());
-        else
+        GtkStyleContext*
             sc = gtk_widget_get_style_context(wxGTKPrivate::GetEntryWidget());
 
         gtk_render_frame(sc, cr, x, y, w, h);
@@ -799,7 +924,7 @@ static long wxTranslateKeySymToWXKey(KeySym keysym, bool isChar)
             break;
 
         case GDK_KEY_KP_Begin:
-            key_code = isChar ? WXK_HOME : WXK_NUMPAD_BEGIN;
+            key_code = WXK_NUMPAD_BEGIN;
             break;
 
         case GDK_KEY_KP_Insert:
@@ -1001,6 +1126,8 @@ static void wxFillOtherKeyEventFields(wxKeyEvent& event,
     event.m_rawCode = (wxUint32) gdk_event->keyval;
     event.m_rawFlags = gdk_event->hardware_keycode;
 
+    event.m_isRepeat = false; // Detecting key repeat not implemented.
+
     event.SetEventObject( win );
 }
 
@@ -1028,7 +1155,12 @@ wxTranslateGTKKeyEventToWx(wxKeyEvent& event,
                                                     : wxT("press"),
                static_cast<unsigned long>(keysym));
 
-    long key_code = wxTranslateKeySymToWXKey(keysym, false /* !isChar */);
+    long key_code = 0;
+
+    if ( !key_code )
+    {
+        key_code = wxTranslateKeySymToWXKey(keysym, false /* !isChar */);
+    }
 
     if ( !key_code )
     {
@@ -1064,7 +1196,9 @@ wxTranslateGTKKeyEventToWx(wxKeyEvent& event,
                 wxLogTrace(TRACE_KEYS, wxT("\t-> keycode %d"), keycode);
 
 #ifdef HAVE_X11_XKBLIB_H
-                KeySym keysymNormalized = XkbKeycodeToKeysym(dpy, keycode, 0, 0);
+                XkbStateRec state;
+                XkbGetState(dpy, XkbUseCoreKbd, &state);
+                KeySym keysymNormalized = XkbKeycodeToKeysym(dpy, keycode, state.group, 0);
 #else
                 wxGCC_WARNING_SUPPRESS(deprecated-declarations)
                 KeySym keysymNormalized = XKeycodeToKeysym(dpy, keycode, 0);
@@ -1111,6 +1245,33 @@ wxTranslateGTKKeyEventToWx(wxKeyEvent& event,
             s_lastKeyPress.keycode = key_code;
         }
     }
+
+#ifdef wxHAS_XKB
+    if ( !key_code && gdk_keyval_to_unicode(gdk_event->keyval) )
+    {
+        // If the event has the corresponding Unicode char, let us set key_code
+        // to character that is generated by that key in the US keyboard layout
+        // as this is better than not providing any key code at all.
+        char key_code_str[64];
+        xkb_state_key_get_utf8(gs_xkbData.GetState(),
+                               gdk_event->hardware_keycode,
+                               key_code_str,
+                               sizeof(key_code_str));
+        if ( strlen(key_code_str) == 1 )
+        {
+            wxLogTrace(TRACE_KEYS, "\t[using key code from XKB]");
+
+            key_code = key_code_str[0];
+
+            // If key_code is a Latin char, it should be in upper register to
+            // match the other ports.
+            if (islower(key_code))
+            {
+                key_code = toupper(key_code);
+            }
+        }
+    }
+#endif // wxHAS_XKB
 
     wxLogTrace(TRACE_KEYS, wxT("\t-> wxKeyCode %ld"), key_code);
 
@@ -1159,9 +1320,13 @@ bool SendCharHookEvent(const wxKeyEvent& event, wxWindow *win)
 // Adjust wxEVT_CHAR event key code fields. This function takes care of two
 // conventions:
 // (a) Ctrl-letter key presses generate key codes in range 1..26
-// (b) Unicode key codes are same as key codes for the codes in 1..255 range
-void AdjustCharEventKeyCodes(wxKeyEvent& event)
+// (b) Unicode key codes are same as key codes for the codes in ASCII range
+//
+// Return true if the key code was modified.
+bool AdjustCharEventKeyCodes(wxKeyEvent& event)
 {
+    bool modified = false;
+
     const int code = event.m_keyCode;
 
     // Check for (a) above.
@@ -1177,31 +1342,55 @@ void AdjustCharEventKeyCodes(wxKeyEvent& event)
 
         // Adjust the Unicode equivalent in the same way too.
         if ( event.m_keyCode != code )
+        {
             event.m_uniChar = event.m_keyCode;
+            modified = true;
+        }
     }
 
     // Check for (b) from above.
     //
     // FIXME: Should we do it for key codes up to 255?
     if ( !event.m_uniChar && code < WXK_DELETE )
+    {
         event.m_uniChar = code;
-}
+        modified = true;
+    }
 
-} // anonymous namespace
+    return modified;
+}
 
 // If a widget does not handle a key or mouse event, GTK+ sends it up the
 // parent chain until it is handled. These events are not supposed to propagate
 // in wxWidgets, so this code avoids handling them in any parent wxWindow,
 // while still allowing the event to propagate so things like native keyboard
 // navigation will work.
-#define wxPROCESS_EVENT_ONCE(EventType, event) \
-    static EventType eventPrev; \
-    if (!gs_isNewEvent && memcmp(&eventPrev, event, sizeof(EventType)) == 0) \
-        return false; \
-    gs_isNewEvent = false; \
-    eventPrev = *event
-
 static bool gs_isNewEvent;
+
+template <typename EventType>
+bool EventAlreadyProcessed(const EventType* event)
+{
+    // The cast is safe because we can only have windows when using GUI.
+    auto* const loop = static_cast<wxGUIEventLoop*>(wxEventLoop::GetActive());
+    if ( !loop )
+    {
+        // This really shouldn't happen, but don't crash if it does.
+        return false;
+    }
+
+    auto* const ev = reinterpret_cast<const GdkEvent*>(event);
+
+    // Ensure we call GTKIsSameAsLastEvent() in any case to always update the
+    // last stored event (i.e. the order of checks here matters).
+    if ( loop->GTKIsSameAsLastEvent(ev, sizeof(EventType)) && !gs_isNewEvent )
+        return true;
+
+    gs_isNewEvent = false;
+
+    return false;
+}
+
+} // anonymous namespace
 
 extern "C" {
 static gboolean
@@ -1212,7 +1401,8 @@ gtk_window_key_press_callback( GtkWidget *WXUNUSED(widget),
     if (g_blockEventsOnDrag)
         return FALSE;
 
-    wxPROCESS_EVENT_ONCE(GdkEventKey, gdk_event);
+    if (EventAlreadyProcessed(gdk_event))
+        return FALSE;
 
     wxKeyEvent event( wxEVT_KEY_DOWN );
     bool ret = false;
@@ -1299,16 +1489,19 @@ gtk_window_key_press_callback( GtkWidget *WXUNUSED(widget),
             }
         }
 
-        if ( key_code )
+        const auto uniChar = gdk_keyval_to_unicode(keysym);
+        if ( key_code || uniChar )
         {
             wxKeyEvent eventChar(wxEVT_CHAR, event);
 
-            wxLogTrace(TRACE_KEYS, wxT("Char event: %ld"), key_code);
+            if ( !AdjustCharEventKeyCodes(eventChar) )
+            {
+                // use Unicode values
+                eventChar.m_keyCode = key_code;
+                eventChar.m_uniChar = uniChar;
+            }
 
-            eventChar.m_keyCode = key_code;
-            eventChar.m_uniChar = gdk_keyval_to_unicode(key_code);
-
-            AdjustCharEventKeyCodes(eventChar);
+            wxLogTrace(TRACE_KEYS, wxT("Char event: %ld"), eventChar.m_keyCode);
 
             ret = win->HandleWindowEvent(eventChar);
         }
@@ -1396,7 +1589,8 @@ gtk_window_key_release_callback( GtkWidget * WXUNUSED(widget),
     if (g_blockEventsOnDrag)
         return FALSE;
 
-    wxPROCESS_EVENT_ONCE(GdkEventKey, gdk_event);
+    if (EventAlreadyProcessed(gdk_event))
+        return FALSE;
 
     wxKeyEvent event( wxEVT_KEY_UP );
     wxTranslateGTKKeyEventToWx(event, win, gdk_event);
@@ -1463,6 +1657,15 @@ static void AdjustEventButtonState(wxMouseEvent& event)
 static
 wxWindowGTK *FindWindowForMouseEvent(wxWindowGTK *win, wxCoord& x, wxCoord& y)
 {
+    // When a window has mouse capture, it should get all the events.
+    if ( g_captureWindow )
+    {
+        win->ClientToScreen(&x, &y);
+        g_captureWindow->ScreenToClient(&x, &y);
+
+        return g_captureWindow;
+    }
+
     wxCoord xx = x;
     wxCoord yy = y;
 
@@ -1541,52 +1744,34 @@ bool wxWindowGTK::GTKShouldIgnoreEvent() const
     return g_blockEventsOnDrag;
 }
 
-int wxWindowGTK::GTKCallbackCommonPrologue(GdkEventAny *event) const
+// Some callbacks check for just g_blockEventsOnDrag but others check for both
+// it and g_blockEventsOnScroll. It's not really clear why, but define a helper
+// function performing the latter check too for now to avoid changing the
+// behaviour of the existing code.
+namespace
 {
-    if (g_blockEventsOnDrag)
-        return TRUE;
-    if (g_blockEventsOnScroll)
-        return TRUE;
 
-    if (!GTKIsOwnWindow(event->window))
-        return FALSE;
-
-    return -1;
+bool AreGTKEventsBlocked()
+{
+    return g_blockEventsOnDrag || g_blockEventsOnScroll;
 }
 
-// overloads for all GDK event types we use here: we need to have this as
-// GdkEventXXX can't be implicitly cast to GdkEventAny even if it, in fact,
-// derives from it in the sense that the structs have the same layout
-#define wxDEFINE_COMMON_PROLOGUE_OVERLOAD(T)                                  \
-    static int wxGtkCallbackCommonPrologue(T *event, wxWindowGTK *win)        \
-    {                                                                         \
-        return win->GTKCallbackCommonPrologue((GdkEventAny *)event);          \
-    }
-
-wxDEFINE_COMMON_PROLOGUE_OVERLOAD(GdkEventButton)
-wxDEFINE_COMMON_PROLOGUE_OVERLOAD(GdkEventMotion)
-wxDEFINE_COMMON_PROLOGUE_OVERLOAD(GdkEventCrossing)
-
-#undef wxDEFINE_COMMON_PROLOGUE_OVERLOAD
-
-#define wxCOMMON_CALLBACK_PROLOGUE(event, win)                                \
-    const int rc = wxGtkCallbackCommonPrologue(event, win);                   \
-    if ( rc != -1 )                                                           \
-        return rc
-
-// all event handlers must have C linkage as they're called from GTK+ C code
-extern "C"
-{
+} // anonymous namespace
 
 //-----------------------------------------------------------------------------
 // "button_press_event"
 //-----------------------------------------------------------------------------
 
-static gboolean
-gtk_window_button_press_callback( GtkWidget* WXUNUSED_IN_GTK3(widget),
-                                  GdkEventButton *gdk_event,
-                                  wxWindowGTK *win )
+gboolean
+wxGTKImpl::WindowButtonPressCallback(GtkWidget* WXUNUSED_IN_GTK3(widget),
+                                     GdkEventButton* gdk_event,
+                                     wxWindowGTK* win, bool synthesized)
 {
+    wxLogTrace(TRACE_MOUSE, "Press for button %d at %g,%g in %s at t=%u",
+               gdk_event->button, gdk_event->x, gdk_event->y,
+               wxDumpWindow(win),
+               gdk_event->time);
+
     /*
       GTK does not set the button1 mask when the event comes from the left
       button of a mouse. but for some reason, it sets it when the event comes
@@ -1594,9 +1779,11 @@ gtk_window_button_press_callback( GtkWidget* WXUNUSED_IN_GTK3(widget),
     */
     gdk_event->state &= ~GDK_BUTTON1_MASK;
 
-    wxPROCESS_EVENT_ONCE(GdkEventButton, gdk_event);
+    if (EventAlreadyProcessed(gdk_event))
+        return FALSE;
 
-    wxCOMMON_CALLBACK_PROLOGUE(gdk_event, win);
+    if ( AreGTKEventsBlocked() )
+        return FALSE;
 
     g_lastButtonNumber = gdk_event->button;
 
@@ -1675,26 +1862,24 @@ gtk_window_button_press_callback( GtkWidget* WXUNUSED_IN_GTK3(widget),
             return false;
     }
 
-    g_lastMouseEvent = (GdkEvent*) gdk_event;
+    SetLastMouseEvent setLastMouse(gdk_event);
 
     wxMouseEvent event( event_type );
     InitMouseEvent( win, event, gdk_event );
+    event.m_synthesized = synthesized;
 
     AdjustEventButtonState(event);
 
     // find the correct window to send the event to: it may be a different one
     // from the one which got it at GTK+ level because some controls don't have
     // their own X window and thus cannot get any events.
-    if ( !g_captureWindow )
-        win = FindWindowForMouseEvent(win, event.m_x, event.m_y);
+    win = FindWindowForMouseEvent(win, event.m_x, event.m_y);
 
     // reset the event object and id in case win changed.
     event.SetEventObject( win );
     event.SetId( win->GetId() );
 
-    bool ret = win->GTKProcessEvent( event );
-    g_lastMouseEvent = nullptr;
-    if ( ret )
+    if ( win->GTKProcessEvent( event ) )
         return TRUE;
 
     if ((event_type == wxEVT_LEFT_DOWN) && !win->IsOfStandardClass() &&
@@ -1719,18 +1904,38 @@ gtk_window_button_press_callback( GtkWidget* WXUNUSED_IN_GTK3(widget),
     return FALSE;
 }
 
+extern "C"
+{
+
+static gboolean
+gtk_window_button_press_callback( GtkWidget* widget,
+                                  GdkEventButton *gdk_event,
+                                  wxWindowGTK *win )
+{
+    return wxGTKImpl::WindowButtonPressCallback(widget, gdk_event, win);
+}
+
+} // extern "C"
+
 //-----------------------------------------------------------------------------
 // "button_release_event"
 //-----------------------------------------------------------------------------
 
-static gboolean
-gtk_window_button_release_callback( GtkWidget *WXUNUSED(widget),
-                                    GdkEventButton *gdk_event,
-                                    wxWindowGTK *win )
+gboolean
+wxGTKImpl::WindowButtonReleaseCallback(GtkWidget* WXUNUSED(widget),
+                                       GdkEventButton* gdk_event,
+                                       wxWindowGTK* win, bool synthesized)
 {
-    wxPROCESS_EVENT_ONCE(GdkEventButton, gdk_event);
+    wxLogTrace(TRACE_MOUSE, "Release for button %d at %g,%g in %s at t=%u",
+               gdk_event->button, gdk_event->x, gdk_event->y,
+               wxDumpWindow(win),
+               gdk_event->time);
 
-    wxCOMMON_CALLBACK_PROLOGUE(gdk_event, win);
+    if (EventAlreadyProcessed(gdk_event))
+        return FALSE;
+
+    if ( AreGTKEventsBlocked() )
+        return FALSE;
 
     g_lastButtonNumber = 0;
 
@@ -1763,30 +1968,38 @@ gtk_window_button_release_callback( GtkWidget *WXUNUSED(widget),
             return FALSE;
     }
 
-    g_lastMouseEvent = (GdkEvent*) gdk_event;
+    SetLastMouseEvent setLastMouse(gdk_event);
 
     wxMouseEvent event( event_type );
     InitMouseEvent( win, event, gdk_event );
+    event.m_synthesized = synthesized;
 
     AdjustEventButtonState(event);
 
-    if ( !g_captureWindow )
-        win = FindWindowForMouseEvent(win, event.m_x, event.m_y);
+    win = FindWindowForMouseEvent(win, event.m_x, event.m_y);
 
     // reset the event object and id in case win changed.
     event.SetEventObject( win );
     event.SetId( win->GetId() );
 
-    // We ignore the result of the event processing here as we don't really
-    // want to prevent the other handlers from running even if we did process
-    // this event ourselves, there is no real advantage in doing this and it
-    // could actually be harmful, see #16055.
-    (void)win->GTKProcessEvent(event);
-
-    g_lastMouseEvent = nullptr;
+    if ( win->GTKProcessEvent(event) )
+        return TRUE;
 
     return FALSE;
 }
+
+extern "C"
+{
+
+static gboolean
+gtk_window_button_release_callback( GtkWidget *widget,
+                                    GdkEventButton *gdk_event,
+                                    wxWindowGTK *win )
+{
+    return wxGTKImpl::WindowButtonReleaseCallback(widget, gdk_event, win);
+}
+
+} // extern "C"
 
 //-----------------------------------------------------------------------------
 
@@ -1825,44 +2038,74 @@ static void SendSetCursorEvent(wxWindowGTK* win, int x, int y)
 // "motion_notify_event"
 //-----------------------------------------------------------------------------
 
-static gboolean
-gtk_window_motion_notify_callback( GtkWidget * WXUNUSED(widget),
-                                   GdkEventMotion *gdk_event,
-                                   wxWindowGTK *win )
+gboolean
+wxGTKImpl::WindowMotionCallback(GtkWidget* WXUNUSED(widget),
+                                       GdkEventMotion* gdk_event,
+                                       wxWindowGTK* win, bool synthesized)
 {
-    wxPROCESS_EVENT_ONCE(GdkEventMotion, gdk_event);
+    if (EventAlreadyProcessed(gdk_event))
+        return FALSE;
 
-    wxCOMMON_CALLBACK_PROLOGUE(gdk_event, win);
+    if ( AreGTKEventsBlocked() )
+        return FALSE;
 
-    g_lastMouseEvent = (GdkEvent*) gdk_event;
+    SetLastMouseEvent setLastMouse(gdk_event);
 
     wxMouseEvent event( wxEVT_MOTION );
     InitMouseEvent(win, event, gdk_event);
+    event.m_synthesized = synthesized;
 
     if ( g_captureWindow )
     {
         // synthesise a mouse enter or leave event if needed
-        GdkWindow* winUnderMouse =
-            wx_gdk_device_get_window_at_position(gdk_event->device, nullptr, nullptr);
+        GdkWindow* winUnderMouse = nullptr;
+        bool isOut = true;
 
-        GdkDisplay* display = winUnderMouse
-            ? gdk_window_get_display(winUnderMouse)
-            : nullptr;
-        if ( !display )
-            display = gdk_display_get_default();
+        if (gdk_event->x >= 0 && gdk_event->y >= 0)
+        {
+            const wxSize size(win->GetClientSize());
+            if (gdk_event->x < size.x && gdk_event->y < size.y)
+            {
+                isOut = false;
+                winUnderMouse =
+                    wx_gdk_device_get_window_at_position(
+                        gdk_event->device, nullptr, nullptr);
+            }
+        }
 
-        // This seems to be necessary and actually been added to
-        // GDK itself in version 2.0.X
-        gdk_display_flush(display);
+        const bool hadMouse = g_captureWindowHasMouse;
+        g_captureWindowHasMouse = false;
 
-        bool hasMouse = winUnderMouse == gdk_event->window;
-        if ( hasMouse != g_captureWindowHasMouse )
+        if (winUnderMouse == gdk_event->window)
+            g_captureWindowHasMouse = true;
+#ifdef __WXGTK3__
+        else if (winUnderMouse)
+        {
+            // Avoid treating overlay scrollbar as a different window
+            void* widgetUnderMouse;
+            gdk_window_get_user_data(winUnderMouse, &widgetUnderMouse);
+            if (GTK_IS_SCROLLBAR(widgetUnderMouse))
+            {
+                GtkWidget* parent = gtk_widget_get_parent(GTK_WIDGET(widgetUnderMouse));
+                if (parent == win->m_widget && GTK_IS_SCROLLED_WINDOW(parent))
+                    g_captureWindowHasMouse = true;
+            }
+        }
+#endif
+
+        if (g_captureWindowHasMouse != hadMouse)
         {
             // the mouse changed window
-            g_captureWindowHasMouse = hasMouse;
-
             wxMouseEvent eventM(g_captureWindowHasMouse ? wxEVT_ENTER_WINDOW
                                                         : wxEVT_LEAVE_WINDOW);
+            if (!g_captureWindowHasMouse && isOut)
+            {
+                // Ensure fractional coordinate is outside window when converted to int
+                if (gdk_event->x < 0)
+                    gdk_event->x = floor(gdk_event->x);
+                if (gdk_event->y < 0)
+                    gdk_event->y = floor(gdk_event->y);
+            }
             InitMouseEvent(win, eventM, gdk_event);
             eventM.SetEventObject(win);
             win->GTKProcessEvent(eventM);
@@ -1870,19 +2113,34 @@ gtk_window_motion_notify_callback( GtkWidget * WXUNUSED(widget),
     }
     else // no capture
     {
-        win = FindWindowForMouseEvent(win, event.m_x, event.m_y);
+        auto* const winUnderMouse =
+            FindWindowForMouseEvent(win, event.m_x, event.m_y);
 
-        // reset the event object and id in case win changed.
-        event.SetEventObject( win );
-        event.SetId( win->GetId() );
+        // If our idea of the window under mouse is different from the actual
+        // window under it, we need to send enter or leave events.
+        bool setCursorEventAlreadySent = false;
+        if ( winUnderMouse != g_windowUnderMouse )
+        {
+            SendEnterLeaveEvents(winUnderMouse, gdk_event);
+
+            // This is done by SendEnterLeaveEvents() internally.
+            setCursorEventAlreadySent = true;
+        }
+
+        // Also redirect the event to the window under mouse if it's different.
+        if ( winUnderMouse != win )
+        {
+            win = winUnderMouse;
+
+            event.SetEventObject( win );
+            event.SetId( win->GetId() );
+        }
+
+        if ( !setCursorEventAlreadySent )
+            SendSetCursorEvent(win, event.m_x, event.m_y);
     }
 
-    if ( !g_captureWindow )
-        SendSetCursorEvent(win, event.m_x, event.m_y);
-
     bool ret = win->GTKProcessEvent(event);
-
-    g_lastMouseEvent = nullptr;
 
     // Request additional motion events. Done at the end to increase the
     // chances that lower priority events requested by the handler above, such
@@ -1901,6 +2159,19 @@ gtk_window_motion_notify_callback( GtkWidget * WXUNUSED(widget),
     return ret;
 }
 
+extern "C"
+{
+
+static gboolean
+gtk_window_motion_notify_callback( GtkWidget * widget,
+                                   GdkEventMotion *gdk_event,
+                                   wxWindowGTK *win )
+{
+    return wxGTKImpl::WindowMotionCallback(widget, gdk_event, win);
+}
+
+} // extern "C"
+
 //-----------------------------------------------------------------------------
 // "scroll_event" (mouse wheel event)
 //-----------------------------------------------------------------------------
@@ -1915,6 +2186,9 @@ static void AdjustRangeValue(GtkRange* range, double step)
         gtk_range_set_value(range, value);
     }
 }
+
+extern "C"
+{
 
 static gboolean
 scroll_event(GtkWidget* widget, GdkEventScroll* gdk_event, wxWindow* win)
@@ -2091,19 +2365,30 @@ wx_window_focus_callback(GtkWidget *widget,
     return FALSE;
 }
 
+} // extern "C"
+
 //-----------------------------------------------------------------------------
 // "enter_notify_event"
 //-----------------------------------------------------------------------------
 
-static gboolean
-gtk_window_enter_callback( GtkWidget*,
-                           GdkEventCrossing *gdk_event,
-                           wxWindowGTK *win )
+namespace wxGTKImpl
 {
-    wxCOMMON_CALLBACK_PROLOGUE(gdk_event, win);
 
-    // Event was emitted after a grab
-    if (gdk_event->mode != GDK_CROSSING_NORMAL) return FALSE;
+// Helper function used by both "enter" and "motion" signal handlers.
+template <typename EventType>
+gboolean SendEnterLeaveEvents(wxWindowGTK* win, EventType* gdk_event)
+{
+    if ( g_windowUnderMouse )
+    {
+        // We must not have got the leave event for the previous window, so
+        // generate it now -- better late than never.
+        wxMouseEvent event( wxEVT_LEAVE_WINDOW );
+        InitMouseEvent(g_windowUnderMouse, event, gdk_event);
+
+        (void)g_windowUnderMouse->GTKProcessEvent(event);
+    }
+
+    g_windowUnderMouse = win;
 
     wxMouseEvent event( wxEVT_ENTER_WINDOW );
     InitMouseEvent(win, event, gdk_event);
@@ -2111,30 +2396,95 @@ gtk_window_enter_callback( GtkWidget*,
     if ( !g_captureWindow )
         SendSetCursorEvent(win, event.m_x, event.m_y);
 
-    return win->GTKProcessEvent(event);
+    return win->GTKProcessEvent(event) ? TRUE : FALSE;
 }
+
+} // namespace wxGTKImpl
+
+// This is a (internally) public function used by wxChoice too.
+gboolean
+wxGTKImpl::WindowEnterCallback(GtkWidget* widget,
+                               GdkEventCrossing* gdk_event,
+                               wxWindowGTK* win)
+{
+    wxLogTrace(TRACE_MOUSE, "Window enter in %s (window %p) for window %p",
+               wxDumpWindow(win), gtk_widget_get_window(widget), gdk_event->window);
+
+    if ( AreGTKEventsBlocked() )
+        return FALSE;
+
+    // Event was emitted after a grab
+    if (gdk_event->mode != GDK_CROSSING_NORMAL)
+    {
+        wxLogTrace(TRACE_MOUSE, "Ignore enter event mode=%d", gdk_event->mode);
+        return FALSE;
+    }
+
+    if ( g_windowUnderMouse == win )
+    {
+        // This can happen if the enter event was generated from another
+        // callback, as is the case for wxSearchCtrl, for example.
+        wxLogTrace(TRACE_MOUSE, "Reentering window %s", wxDumpWindow(win));
+        return FALSE;
+    }
+
+    return SendEnterLeaveEvents(win, gdk_event);
+}
+
+extern "C" {
+
+static gboolean
+gtk_window_enter_callback( GtkWidget* widget,
+                           GdkEventCrossing *gdk_event,
+                           wxWindowGTK *win )
+{
+    return wxGTKImpl::WindowEnterCallback(widget, gdk_event, win);
+}
+
+} // extern "C"
 
 //-----------------------------------------------------------------------------
 // "leave_notify_event"
 //-----------------------------------------------------------------------------
 
-static gboolean
-gtk_window_leave_callback( GtkWidget*,
-                           GdkEventCrossing *gdk_event,
-                           wxWindowGTK *win )
+gboolean
+wxGTKImpl::WindowLeaveCallback(GtkWidget* widget,
+                               GdkEventCrossing* gdk_event,
+                               wxWindowGTK* win)
 {
-    wxCOMMON_CALLBACK_PROLOGUE(gdk_event, win);
+    wxLogTrace(TRACE_MOUSE, "Window leave in %s (window %p) for window %p",
+               wxDumpWindow(win), gtk_widget_get_window(widget), gdk_event->window);
+
+    if ( AreGTKEventsBlocked() )
+        return FALSE;
 
     if (win->m_needCursorReset)
         win->GTKUpdateCursor();
 
     // Event was emitted after an ungrab
-    if (gdk_event->mode != GDK_CROSSING_NORMAL) return FALSE;
+    if (gdk_event->mode != GDK_CROSSING_NORMAL)
+    {
+        wxLogTrace(TRACE_MOUSE, "Ignore leave event mode=%d", gdk_event->mode);
+        return FALSE;
+    }
+
+    if ( win == g_windowUnderMouse )
+        g_windowUnderMouse = nullptr;
 
     wxMouseEvent event( wxEVT_LEAVE_WINDOW );
     InitMouseEvent(win, event, gdk_event);
 
     return win->GTKProcessEvent(event);
+}
+
+extern "C" {
+
+static gboolean
+gtk_window_leave_callback( GtkWidget* widget,
+                           GdkEventCrossing *gdk_event,
+                           wxWindowGTK *win )
+{
+    return wxGTKImpl::WindowLeaveCallback(widget, gdk_event, win);
 }
 
 //-----------------------------------------------------------------------------
@@ -2760,6 +3110,9 @@ wxWindowGTK::~wxWindowGTK()
     if ( g_captureWindow == this )
         g_captureWindow = nullptr;
 
+    if ( g_windowUnderMouse == this )
+        g_windowUnderMouse = nullptr;
+
     if (m_wxwindow)
     {
         GTKDisconnect(m_wxwindow);
@@ -2872,7 +3225,15 @@ void wxWindowGTK::PostCreation()
 
     // focus handling
 
-    if (!GTK_IS_WINDOW(m_widget))
+    // Check for GTKNeedsParent() || IsTopLevel() is a hack: it catches the
+    // case of wxMenuBar, which isn't supposed to generate any focus events,
+    // and which is the only non-TLW which returns false from this function.
+    //
+    // The TLW check overlaps with !GTK_IS_WINDOW() check, but it's not 100%
+    // obvious if GTK_IS_WINDOW() and wxWindow::IsTopLevel() are really exactly
+    // equivalent, so for now ensure we don't change the existing check which
+    // only used !GTK_IS_WINDOW().
+    if (!GTK_IS_WINDOW(m_widget) && (GTKNeedsParent() || IsTopLevel()))
     {
         if (m_focusWidget == nullptr)
             m_focusWidget = m_widget;
@@ -3439,9 +3800,9 @@ wxEmulateLeftDownEvent(GtkWidget* widget, GdkEventTouch* gdk_event, wxWindow* wi
         return;
 
     wxEventButtonFromEventTouch(&gdk_event_button, gdk_event);
-    gtk_window_button_press_callback( widget,
-                                      &gdk_event_button,
-                                      win );
+    wxGTKImpl::WindowButtonPressCallback(widget,
+                                         &gdk_event_button,
+                                         win, true);
 }
 
 void
@@ -3453,9 +3814,9 @@ wxEmulateLeftUpEvent(GtkWidget* widget,GdkEventTouch* gdk_event, wxWindow* win)
         return;
 
     wxEventButtonFromEventTouch(&gdk_event_button, gdk_event);
-    gtk_window_button_release_callback( widget,
-                                        &gdk_event_button,
-                                        win );
+    wxGTKImpl::WindowButtonReleaseCallback(widget,
+                                           &gdk_event_button,
+                                           win, true);
 }
 
 void
@@ -3467,18 +3828,59 @@ wxEmulateMotionEvent(GtkWidget* widget, GdkEventTouch* gdk_event, wxWindow* win)
         return;
 
     wxEventMotionFromEventTouch(&gdk_event_motion, gdk_event);
-    gtk_window_motion_notify_callback(widget, &gdk_event_motion, win);
+    wxGTKImpl::WindowMotionCallback(widget,
+                                    &gdk_event_motion,
+                                    win, true);
 }
 
 } // anonymous namespace
 
 extern "C" {
-static void
+static gboolean
 touch_callback(GtkWidget* widget, GdkEventTouch* gdk_event, wxWindow* win)
 {
     wxWindowGesturesData* const data = wxWindowGestures::FromObject(win);
     if ( !data )
-        return;
+        return false;
+
+    if ( data->m_rawTouchEvents)
+    {
+        wxEventType type;
+
+        switch(gdk_event->type)
+        {
+        case GDK_TOUCH_BEGIN:
+            type = wxEVT_TOUCH_BEGIN;
+            break;
+
+        case GDK_TOUCH_UPDATE:
+            type = wxEVT_TOUCH_MOVE;
+            break;
+
+        case GDK_TOUCH_END:
+            type = wxEVT_TOUCH_END;
+            break;
+
+        case GDK_TOUCH_CANCEL:
+            type = wxEVT_TOUCH_CANCEL;
+            break;
+
+        default:
+            type = wxEVT_NULL;
+        }
+        if (type != wxEVT_NULL)
+        {
+            wxMultiTouchEvent event(win->GetId(), type);
+
+            event.SetEventObject(win);
+            event.SetPosition(wxPoint2DDouble(gdk_event->x, gdk_event->y));
+            event.SetSequenceId(wxTouchSequenceId(gdk_event->sequence));
+            event.SetPrimary(gdk_event->emulating_pointer);
+
+            if (win->GTKProcessEvent(event))
+                return true;
+        }
+    }
 
     switch ( gdk_event->type )
     {
@@ -3574,6 +3976,8 @@ touch_callback(GtkWidget* widget, GdkEventTouch* gdk_event, wxWindow* win)
         default:
         break;
     }
+
+    return true;
 }
 }
 
@@ -3587,6 +3991,7 @@ void wxWindowGesturesData::Reinit(wxWindowGTK* win,
     m_allowedGestures = 0;
     m_activeGestures = 0;
     m_touchSequence = nullptr;
+    m_rawTouchEvents = false;
 
     if ( eventsMask & wxTOUCH_VERTICAL_PAN_GESTURE )
     {
@@ -3701,7 +4106,16 @@ void wxWindowGesturesData::Reinit(wxWindowGTK* win,
         m_long_press_gesture = nullptr;
     }
 
-    wxASSERT_MSG( eventsMask == 0, "Unknown touch event mask bit specified" );
+    if ( eventsMask & wxTOUCH_RAW_EVENTS )
+    {
+        if ( gtk_check_version(3, 4, 0) == nullptr )
+        {
+            gtk_widget_add_events(widget, GDK_TOUCH_MASK);
+        }
+
+        eventsMask &= ~wxTOUCH_RAW_EVENTS;
+        m_rawTouchEvents = true;
+    }
 
     // GDK_TOUCHPAD_GESTURE_MASK was added in 3.18, but we can just define it
     // ourselves if we use an earlier version when compiling.
@@ -3712,6 +4126,8 @@ void wxWindowGesturesData::Reinit(wxWindowGTK* win,
     {
         gtk_widget_add_events(widget, GDK_TOUCHPAD_GESTURE_MASK);
     }
+
+    wxASSERT_MSG( eventsMask == 0, "Unknown touch event mask bit specified" );
 
     g_signal_connect (widget, "touch-event",
                       G_CALLBACK(touch_callback), win);
@@ -3724,6 +4140,7 @@ void wxWindowGesturesData::Free()
     g_clear_object(&m_zoom_gesture);
     g_clear_object(&m_rotate_gesture);
     g_clear_object(&m_long_press_gesture);
+    m_rawTouchEvents = false;
 
     // We don't current remove GDK_TOUCHPAD_GESTURE_MASK as this can't be done
     // for a window as long as it's realized, and this might still be the case
@@ -4010,6 +4427,19 @@ bool wxWindowGTK::GTKShowFromOnIdle()
 
     return false;
 }
+
+#ifdef __WINDOWS__
+WXHWND wxWindowGTK::GTKGetWin32Handle() const
+{
+    auto gtkWindow{gtk_widget_get_window(m_widget)};
+
+    // If widget is not realized, there's no underlying handle to get.
+    if (!gtkWindow)
+        return nullptr;
+
+    return reinterpret_cast<WXHWND>(gdk_win32_window_get_handle(gtkWindow));
+}
+#endif // __WINDOWS__
 
 void wxWindowGTK::OnInternalIdle()
 {
@@ -4559,8 +4989,12 @@ bool wxWindowGTK::GTKHandleFocusIn()
 
     if ( gs_pendingFocus )
     {
-        wxLogTrace(TRACE_FOCUS, "Resetting pending focus %s on focus set",
-                   wxDumpWindow(gs_pendingFocus));
+        if ( gs_pendingFocus != gs_currentFocus )
+        {
+            wxLogTrace(TRACE_FOCUS, "Resetting pending focus %s on focus set",
+                       wxDumpWindow(gs_pendingFocus));
+        }
+
         gs_pendingFocus = nullptr;
     }
 
@@ -4779,10 +5213,19 @@ bool wxWindowGTK::Reparent( wxWindowBase *newParentBase )
     return true;
 }
 
+void wxWindowGTK::GTKRemoveBorder()
+{
+}
+
 void wxWindowGTK::DoAddChild(wxWindowGTK *child)
 {
     wxASSERT_MSG( (m_widget != nullptr), wxT("invalid window") );
     wxASSERT_MSG( (child != nullptr), wxT("invalid child window") );
+
+    // If parent is already showing, changing CSS after adding child
+    // can cause transitory visual glitches, so change it here
+    if (HasFlag(wxBORDER_NONE))
+        GTKRemoveBorder();
 
     /* add to list */
     AddChild( child );
@@ -5175,9 +5618,9 @@ void wxWindowGTK::Update()
     if (m_widget && gtk_widget_get_mapped(m_widget) && m_width > 0 && m_height > 0)
     {
         GdkDisplay* display = gtk_widget_get_display(m_widget);
-        // Flush everything out to the server, and wait for it to finish.
-        // This ensures nothing will overwrite the drawing we are about to do.
-        gdk_display_sync(display);
+        // If window has just been shown, drawing may not work unless pending
+        // requests queued for the windowing system are flushed first.
+        gdk_display_flush(display);
 
         GdkWindow* window = GTKGetDrawingWindow();
         if (window == nullptr)
@@ -5187,7 +5630,6 @@ void wxWindowGTK::Update()
         gdk_window_process_updates(window, true);
         wxGCC_WARNING_RESTORE(deprecated-declarations)
 
-        // Flush again, but no need to wait for it to finish
         gdk_display_flush(display);
     }
 }
@@ -5950,14 +6392,47 @@ bool wxWindowGTK::DoPopupMenu( wxMenu *menu, int x, int y )
     GdkWindow* window = gtk_widget_get_window(m_wxwindow ? m_wxwindow : m_widget);
     if (wxGTKImpl::IsWayland(window) && wx_is_at_least_gtk3(22))
     {
-        if (x == -1 && y == -1)
-            gtk_menu_popup_at_pointer(GTK_MENU(menu->m_menu), nullptr);
-        else
+        GdkEvent* currentEvent = gtk_get_current_event();
+        GdkEvent* event = currentEvent;
+        GdkDevice* device = event ? gdk_event_get_device(event) : nullptr;
+        if (device == nullptr)
         {
-            const GdkRectangle rect = { x, y, 1, 1 };
-            gtk_menu_popup_at_rect(GTK_MENU(menu->m_menu),
-                window, &rect, GDK_GRAVITY_NORTH_WEST, GDK_GRAVITY_NORTH_WEST, nullptr);
+            GdkSeat* seat = gdk_display_get_default_seat(gdk_window_get_display(window));
+            device = gdk_seat_get_pointer(seat);
         }
+        GdkEventButton eventTmp = { };
+        if (event == nullptr)
+        {
+            // An event is needed to avoid a Gtk-WARNING "no trigger event for menu popup".
+            // If a real one is not available, use a temporary with the fields
+            // set that GTK is going to use.
+            eventTmp.type = GDK_BUTTON_RELEASE;
+            eventTmp.time = GDK_CURRENT_TIME;
+            eventTmp.device = device;
+            event = (GdkEvent*)&eventTmp;
+        }
+        if (x == -1 && y == -1)
+        {
+            if (gdk_device_get_source(device) == GDK_SOURCE_KEYBOARD)
+            {
+                // We can't get the position from this device in this case, as
+                // gdk_window_get_device_position() would just fail with a
+                // "critical" error, so use the global mouse position instead:
+                // it should be what we want anyhow.
+                wxGetMousePosition(&x, &y);
+            }
+            else
+            {
+                gdk_window_get_device_position(window, device, &x, &y, nullptr);
+            }
+        }
+
+        const GdkRectangle rect = { x, y, 1, 1 };
+        gtk_menu_popup_at_rect(GTK_MENU(menu->m_menu),
+            window, &rect, GDK_GRAVITY_NORTH_WEST, GDK_GRAVITY_NORTH_WEST, event);
+
+        if (currentEvent)
+            gdk_event_free(currentEvent);
     }
     else
 #endif // GTK_CHECK_VERSION(3,22,0)
@@ -6128,34 +6603,31 @@ void wxWindowGTK::DoCaptureMouse()
 
     wxCHECK_RET( window, wxT("CaptureMouse() failed") );
 
-#ifdef __WXGTK4__
-    GdkDisplay* display = gdk_window_get_display(window);
-    GdkSeat* seat = gdk_display_get_default_seat(display);
-    gdk_seat_grab(seat, window, GDK_SEAT_CAPABILITY_POINTER, false, nullptr, nullptr, nullptr, 0);
-#else
-    const GdkEventMask mask = GdkEventMask(
-        GDK_SCROLL_MASK |
-        GDK_BUTTON_PRESS_MASK |
-        GDK_BUTTON_RELEASE_MASK |
-        GDK_POINTER_MOTION_HINT_MASK |
-        GDK_POINTER_MOTION_MASK);
-#ifdef __WXGTK3__
-    GdkDisplay* display = gdk_window_get_display(window);
-    wxGCC_WARNING_SUPPRESS(deprecated-declarations)
-    GdkDeviceManager* manager = gdk_display_get_device_manager(display);
-    GdkDevice* device = gdk_device_manager_get_client_pointer(manager);
-    gdk_device_grab(
-        device, window, GDK_OWNERSHIP_NONE, false, mask,
-        nullptr, unsigned(GDK_CURRENT_TIME));
-    wxGCC_WARNING_RESTORE()
-#else
-    gdk_pointer_grab( window, FALSE,
-                      mask,
-                      nullptr,
-                      nullptr,
-                      (guint32)GDK_CURRENT_TIME );
+#if GTK_CHECK_VERSION(3,20,0)
+    if (gtk_check_version(3,20,0) == nullptr)
+    {
+        GdkDisplay* display = gdk_window_get_display(window);
+        GdkSeat* seat = gdk_display_get_default_seat(display);
+        gdk_seat_grab(seat, window, GDK_SEAT_CAPABILITY_ALL_POINTING, false,
+            nullptr, nullptr, nullptr, nullptr);
+    }
+    else
 #endif
-#endif // !__WXGTK4__
+    {
+        const GdkEventMask mask = GdkEventMask(
+            GDK_SCROLL_MASK |
+            GDK_BUTTON_PRESS_MASK |
+            GDK_BUTTON_RELEASE_MASK |
+            GDK_POINTER_MOTION_HINT_MASK |
+            GDK_POINTER_MOTION_MASK);
+        wxGCC_WARNING_SUPPRESS(deprecated-declarations)
+        gdk_pointer_grab( window, FALSE,
+                          mask,
+                          nullptr,
+                          nullptr,
+                          (guint32)GDK_CURRENT_TIME );
+        wxGCC_WARNING_RESTORE()
+    }
     g_captureWindow = this;
     g_captureWindowHasMouse = true;
 }
@@ -6177,38 +6649,32 @@ void wxWindowGTK::DoReleaseMouse()
     if (!window)
         return;
 
-#ifdef __WXGTK3__
     GdkDisplay* display = gdk_window_get_display(window);
-#ifdef __WXGTK4__
-    gdk_seat_ungrab(gdk_display_get_default_seat(display));
-#else
-    wxGCC_WARNING_SUPPRESS(deprecated-declarations)
-    GdkDeviceManager* manager = gdk_display_get_device_manager(display);
-    GdkDevice* device = gdk_device_manager_get_client_pointer(manager);
-    gdk_device_ungrab(device, unsigned(GDK_CURRENT_TIME));
-    wxGCC_WARNING_RESTORE()
+#if GTK_CHECK_VERSION(3,20,0)
+    if (gtk_check_version(3,20,0) == nullptr)
+        gdk_seat_ungrab(gdk_display_get_default_seat(display));
+    else
 #endif
-#else
-    gdk_pointer_ungrab ( (guint32)GDK_CURRENT_TIME );
-#endif
+    {
+        wxGCC_WARNING_SUPPRESS(deprecated-declarations)
+        gdk_display_pointer_ungrab(display, unsigned(GDK_CURRENT_TIME));
+        wxGCC_WARNING_RESTORE()
+    }
 }
 
 void wxWindowGTK::GTKReleaseMouseAndNotify()
 {
     GdkDisplay* display = gtk_widget_get_display(m_widget);
-#ifdef __WXGTK3__
-#ifdef __WXGTK4__
-    gdk_seat_ungrab(gdk_display_get_default_seat(display));
-#else
-    wxGCC_WARNING_SUPPRESS(deprecated-declarations)
-    GdkDeviceManager* manager = gdk_display_get_device_manager(display);
-    GdkDevice* device = gdk_device_manager_get_client_pointer(manager);
-    gdk_device_ungrab(device, unsigned(GDK_CURRENT_TIME));
-    wxGCC_WARNING_RESTORE()
+#if GTK_CHECK_VERSION(3,20,0)
+    if (gtk_check_version(3,20,0) == nullptr)
+        gdk_seat_ungrab(gdk_display_get_default_seat(display));
+    else
 #endif
-#else
-    gdk_display_pointer_ungrab(display, unsigned(GDK_CURRENT_TIME));
-#endif
+    {
+        wxGCC_WARNING_SUPPRESS(deprecated-declarations)
+        gdk_display_pointer_ungrab(display, unsigned(GDK_CURRENT_TIME));
+        wxGCC_WARNING_RESTORE()
+    }
     g_captureWindow = nullptr;
     NotifyCaptureLost();
 }

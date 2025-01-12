@@ -2,7 +2,6 @@
 // Name:        wx/frame.h
 // Purpose:     wxFrame class interface
 // Author:      Vadim Zeitlin
-// Modified by:
 // Created:     15.11.99
 // Copyright:   (c) wxWidgets team
 // Licence:     wxWindows licence
@@ -178,6 +177,8 @@ public:
     // originally shown before the menu was opened if show == false
     virtual void DoGiveHelp(const wxString& text, bool show);
 #endif
+
+    virtual void RemoveChild(wxWindowBase *child) override;
 
     virtual bool IsClientAreaChild(const wxWindow *child) const override
     {

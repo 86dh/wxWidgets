@@ -41,7 +41,6 @@
 
 #ifndef WX_PRECOMP
     #include "wx/string.h"
-    #include "wx/hash.h"
     #include "wx/utils.h"     // for wxMin and wxMax
     #include "wx/log.h"
 #endif
@@ -51,13 +50,6 @@
 #endif
 
 #include <errno.h>
-
-#if defined(__DARWIN__)
-    #include "wx/osx/core/cfref.h"
-    #include <CoreFoundation/CFLocale.h>
-    #include "wx/osx/core/cfstring.h"
-    #include <xlocale.h>
-#endif
 
 wxDECL_FOR_STRICT_MINGW32(int, vswprintf, (wchar_t*, const wchar_t*, __VALIST))
 wxDECL_FOR_STRICT_MINGW32(int, _putws, (const wchar_t*))
@@ -125,27 +117,7 @@ WXDLLIMPEXP_BASE size_t wxWC2MB(char *buf, const wchar_t *pwz, size_t n)
 
 char* wxSetlocale(int category, const char *locale)
 {
-#ifdef __WXMAC__
-    char *rv = nullptr ;
-    if ( locale != nullptr && locale[0] == 0 )
-    {
-        // the attempt to use newlocale(LC_ALL_MASK, "", nullptr);
-        // here in order to deduce the language along the environment vars rules
-        // lead to strange crashes later...
-
-        // we have to emulate the behaviour under OS X
-        wxCFRef<CFLocaleRef> userLocaleRef(CFLocaleCopyCurrent());
-        wxCFStringRef str(wxCFRetain((CFStringRef)CFLocaleGetValue(userLocaleRef, kCFLocaleLanguageCode)));
-        wxString langFull = str.AsString()+"_";
-        str.reset(wxCFRetain((CFStringRef)CFLocaleGetValue(userLocaleRef, kCFLocaleCountryCode)));
-        langFull += str.AsString();
-        rv = setlocale(category, langFull.c_str());
-    }
-    else
-        rv = setlocale(category, locale);
-#else
     char *rv = setlocale(category, locale);
-#endif
     if ( locale != nullptr /* setting locale, not querying */ &&
          rv /* call was successful */ )
     {
@@ -767,7 +739,10 @@ WXDLLIMPEXP_BASE int wxCRT_StrnicmpW(const wchar_t *s1, const wchar_t *s2, size_
 {
   // initialize the variables just to suppress stupid gcc warning
   wchar_t c1 = 0, c2 = 0;
-  while (n && ((c1 = wxTolower(*s1)) == (c2 = wxTolower(*s2)) ) && c1) n--, s1++, s2++;
+    while (n && ((c1 = wxTolower(*s1)) == (c2 = wxTolower(*s2)) ) && c1)
+    {
+        n--; s1++; s2++;
+    }
   if (n) {
     if (c1 < c2) return -1;
     if (c1 > c2) return 1;
@@ -835,7 +810,6 @@ wxCRT_StrftimeW(wchar_t *s, size_t maxsize, const wchar_t *fmt, const struct tm 
 }
 #endif // !wxCRT_StrftimeW
 
-#ifdef wxLongLong_t
 template<typename T>
 static wxULongLong_t
 wxCRT_StrtoullBase(const T* nptr, T** endptr, int base, T* sign)
@@ -998,8 +972,6 @@ wxULongLong_t wxCRT_StrtoullW(const wchar_t* nptr, wchar_t** endptr, int base)
     { return wxCRT_DoStrtoull(nptr, endptr, base); }
 #endif
 
-#endif // wxLongLong_t
-
 // ----------------------------------------------------------------------------
 // strtok() functions
 // ----------------------------------------------------------------------------
@@ -1068,6 +1040,19 @@ char *strdup(const char *s)
 bool wxLocaleIsUtf8 = false; // the safer setting if not known
 #endif
 
+static bool wxIsCharsetUtf8(const char* charset)
+{
+    if ( strcmp(charset, "UTF-8") == 0 ||
+         strcmp(charset, "utf-8") == 0 ||
+         strcmp(charset, "UTF8") == 0 ||
+         strcmp(charset, "utf8") == 0 )
+    {
+        return true;
+    }
+
+    return false;
+}
+
 static bool wxIsLocaleUtf8()
 {
     // NB: we intentionally don't use wxLocale::GetSystemEncodingName(),
@@ -1078,31 +1063,28 @@ static bool wxIsLocaleUtf8()
     // GNU libc provides current character set this way (this conforms to
     // Unix98)
     const char *charset = nl_langinfo(CODESET);
-    if ( charset )
-    {
-        // "UTF-8" is used by modern glibc versions, but test other variants
-        // as well, just in case:
-        if ( strcmp(charset, "UTF-8") == 0 ||
-             strcmp(charset, "utf-8") == 0 ||
-             strcmp(charset, "UTF8") == 0 ||
-             strcmp(charset, "utf8") == 0 )
-        {
-            return true;
-        }
-    }
+    if ( charset && wxIsCharsetUtf8(charset) )
+        return true;
 #endif // HAVE_LANGINFO_H
 
-    // check if we're running under the "C" locale: it is 7bit subset
-    // of UTF-8, so it can be safely used with the UTF-8 build:
+    // check LC_CTYPE string: this also works with (sufficiently recent) MSVC
+    // and on any other system without nl_langinfo()
     const char *lc_ctype = setlocale(LC_CTYPE, nullptr);
-    if ( lc_ctype &&
-         (strcmp(lc_ctype, "C") == 0 || strcmp(lc_ctype, "POSIX") == 0) )
+    if ( lc_ctype )
     {
-        return true;
+        // check if we're running under the "C" locale: it is 7bit subset
+        // of UTF-8, so it can be safely used with the UTF-8 build:
+        if ( (strcmp(lc_ctype, "C") == 0 || strcmp(lc_ctype, "POSIX") == 0) )
+            return true;
+
+        // any other locale can also use UTF-8 encoding if it's explicitly
+        // specified
+        const char* charset = strrchr(lc_ctype, '.');
+        if ( charset && wxIsCharsetUtf8(charset + 1) )
+            return true;
     }
 
-    // we don't know what charset libc is using, so assume the worst
-    // to be safe:
+    // by default assume that we don't use UTF-8
     return false;
 }
 
@@ -1234,21 +1216,21 @@ int wxVsscanf(const wxCStrData& str, const wchar_t *format, va_list ap)
     } \
     return d;
 
-long android_wcstol(const wchar_t *nptr, wchar_t **endptr, int base)
+WXDLLEXPORT long android_wcstol(const wchar_t *nptr, wchar_t **endptr, int base)
 {
     ANDROID_WCSTO_START
     long d = strtol(dst, &dstendp, base);
     ANDROID_WCSTO_END
 }
 
-unsigned long android_wcstoul(const wchar_t *nptr, wchar_t **endptr, int base)
+WXDLLEXPORT unsigned long android_wcstoul(const wchar_t *nptr, wchar_t **endptr, int base)
 {
     ANDROID_WCSTO_START
     unsigned long d = strtoul(dst, &dstendp, base);
     ANDROID_WCSTO_END
 }
 
-double android_wcstod(const wchar_t *nptr, wchar_t **endptr)
+WXDLLEXPORT double android_wcstod(const wchar_t *nptr, wchar_t **endptr)
 {
     ANDROID_WCSTO_START
     double d = strtod(dst, &dstendp);

@@ -115,6 +115,8 @@ public:
     virtual bool SetCursor( const wxCursor &cursor ) override;
     virtual bool SetFont( const wxFont &font ) override;
 
+    virtual bool IsTransparentBackgroundSupported(wxString* reason = nullptr) const override;
+
     virtual int GetCharHeight() const override;
     virtual int GetCharWidth() const override;
 
@@ -287,6 +289,14 @@ public:
     // Setup background and foreground colours correctly
     virtual void SetupColours();
 
+    virtual wxVisualAttributes GetDefaultAttributes() const override
+    {
+        return GetClassDefaultAttributes(GetWindowVariant());
+    }
+
+    static wxVisualAttributes
+    GetClassDefaultAttributes(wxWindowVariant variant = wxWINDOW_VARIANT_NORMAL);
+
     // ------------------------------------------------------------------------
     // helpers for message handlers: these perform the same function as the
     // message crackers from <windowsx.h> - they unpack WPARAM and LPARAM into
@@ -380,6 +390,7 @@ public:
     bool HandleRotateGesture(const wxPoint& pt, WXDWORD angleArgument, WXDWORD flags);
     bool HandleTwoFingerTap(const wxPoint& pt, WXDWORD flags);
     bool HandlePressAndTap(const wxPoint& pt, WXDWORD flags);
+    bool HandleTouch(WXWPARAM wParam, WXLPARAM lParam);
 
     bool HandleChar(WXWPARAM wParam, WXLPARAM lParam);
     bool HandleKeyDown(WXWPARAM wParam, WXLPARAM lParam);
@@ -475,21 +486,6 @@ public:
     // querying the parent windows via MSWGetBgBrushForChild() recursively
     WXHBRUSH MSWGetBgBrush(WXHDC hDC);
 
-    enum MSWThemeColour
-    {
-        ThemeColourText = 0,
-        ThemeColourBackground,
-        ThemeColourBorder
-    };
-
-    // returns a specific theme colour, or if that is not possible then
-    // wxSystemSettings::GetColour(fallback)
-    wxColour MSWGetThemeColour(const wchar_t *themeName,
-                               int themePart,
-                               int themeState,
-                               MSWThemeColour themeColour,
-                               wxSystemColour fallback) const;
-
     // gives the parent the possibility to draw its children background, e.g.
     // this is used by wxNotebook to do it using DrawThemeBackground()
     //
@@ -561,6 +557,10 @@ public:
     // incompatible with this style.
     void MSWDisableComposited();
 
+    // This function is called for all child windows when compositing is
+    // disabled for their parent.
+    virtual void MSWOnDisabledComposited() { }
+
     // synthesize a wxEVT_LEAVE_WINDOW event and set m_mouseInWindow to false
     void GenerateMouseLeave();
 
@@ -575,6 +575,10 @@ public:
 
     // Find the menu corresponding to the given handle.
     virtual wxMenu* MSWFindMenuFromHMENU(WXHMENU hMenu);
+
+    // Find the the current menu item using the given handle and the item id
+    virtual wxMenuItem* MSWFindMenuItemFromHMENU(WXHMENU hMenu, int nItem);
+
 #endif // wxUSE_MENUS && !__WXUNIVERSAL__
 
     // Return the default button for the TLW containing this window or nullptr if
@@ -609,26 +613,22 @@ protected:
     // controls. The default version updates m_font of this window.
     virtual void MSWUpdateFontOnDPIChange(const wxSize& newDPI);
 
-    // this allows you to implement standard control borders without
-    // repeating the code in different classes that are not derived from
-    // wxControl
-    virtual wxBorder GetDefaultBorderForControl() const override;
+    // Also called from MSWUpdateOnDPIChange() but, unlike the function above,
+    // this one is called after updating all the children and just before
+    // letting the application handle the given wxDPIChangedEvent (whose
+    // Scale() functions may be useful for the overridden versions).
+    virtual void
+    MSWBeforeDPIChangedEvent(const wxDPIChangedEvent& WXUNUSED(event))
+    {
+    }
 
-    // choose the default border for this window
-    virtual wxBorder GetDefaultBorder() const override;
-
-    // Translate wxBORDER_THEME (and other border styles if necessary to the value
-    // that makes most sense for this Windows environment
-    virtual wxBorder TranslateBorder(wxBorder border) const;
+    // Translate wxBORDER_THEME to a standard border style or return it as is
+    // if themed border should be used, depending on CanApplyThemeBorder().
+    wxBorder DoTranslateBorder(wxBorder border) const;
 
 #if wxUSE_MENUS_NATIVE
     virtual bool DoPopupMenu( wxMenu *menu, int x, int y ) override;
 #endif // wxUSE_MENUS_NATIVE
-
-    // Called by Reparent() after the window parent changes, i.e. GetParent()
-    // returns the new parent inside this function.
-    virtual void MSWAfterReparent();
-
 
     // the window handle
     WXHWND                m_hWnd;
@@ -752,6 +752,9 @@ protected:
 private:
     // common part of all ctors
     void Init();
+
+    // common part of UnsubclassWin() and DissociateHandle()
+    WXHWND DoDetachHWND();
 
     // the (non-virtual) handlers for the events
     bool HandleMove(int x, int y);

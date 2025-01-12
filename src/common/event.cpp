@@ -2,7 +2,6 @@
 // Name:        src/common/event.cpp
 // Purpose:     Event classes
 // Author:      Julian Smart
-// Modified by:
 // Created:     01/02/97
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -45,10 +44,7 @@
 #include "wx/thread.h"
 
 #if wxUSE_BASE
-    #include "wx/scopedptr.h"
-
-    wxDECLARE_SCOPED_PTR(wxEvent, wxEventPtr)
-    wxDEFINE_SCOPED_PTR(wxEvent, wxEventPtr)
+    #include <memory>
 #endif // wxUSE_BASE
 
 #if wxUSE_GUI
@@ -105,6 +101,7 @@
     wxIMPLEMENT_DYNAMIC_CLASS(wxMouseCaptureChangedEvent, wxEvent);
     wxIMPLEMENT_DYNAMIC_CLASS(wxMouseCaptureLostEvent, wxEvent);
     wxIMPLEMENT_DYNAMIC_CLASS(wxClipboardTextEvent, wxCommandEvent);
+    wxIMPLEMENT_DYNAMIC_CLASS(wxMultiTouchEvent, wxEvent);
     wxIMPLEMENT_DYNAMIC_CLASS(wxGestureEvent, wxEvent);
     wxIMPLEMENT_DYNAMIC_CLASS(wxPanGestureEvent, wxGestureEvent);
     wxIMPLEMENT_DYNAMIC_CLASS(wxZoomGestureEvent, wxGestureEvent);
@@ -130,27 +127,6 @@ wxEventHashTable wxEvtHandler::sm_eventHashTable(wxEvtHandler::sm_eventTable);
 const wxEventTableEntry wxEvtHandler::sm_eventTableEntries[] =
     { wxDECLARE_EVENT_TABLE_TERMINATOR() };
 
-
-// wxUSE_MEMORY_TRACING considers memory freed from the static objects dtors
-// leaked, so we need to manually clean up all event tables before checking for
-// the memory leaks when using it, however this breaks re-initializing the
-// library (i.e. repeated calls to wxInitialize/wxUninitialize) because the
-// event tables won't be rebuilt the next time, so disable this by default
-#if wxUSE_MEMORY_TRACING
-
-class wxEventTableEntryModule: public wxModule
-{
-public:
-    wxEventTableEntryModule() { }
-    virtual bool OnInit() override { return true; }
-    virtual void OnExit() override { wxEventHashTable::ClearAll(); }
-
-    wxDECLARE_DYNAMIC_CLASS(wxEventTableEntryModule);
-};
-
-wxIMPLEMENT_DYNAMIC_CLASS(wxEventTableEntryModule, wxModule);
-
-#endif // wxUSE_MEMORY_TRACING
 
 // ----------------------------------------------------------------------------
 // global variables
@@ -266,6 +242,12 @@ wxDEFINE_EVENT( wxEVT_SCROLLWIN_PAGEUP, wxScrollWinEvent );
 wxDEFINE_EVENT( wxEVT_SCROLLWIN_PAGEDOWN, wxScrollWinEvent );
 wxDEFINE_EVENT( wxEVT_SCROLLWIN_THUMBTRACK, wxScrollWinEvent );
 wxDEFINE_EVENT( wxEVT_SCROLLWIN_THUMBRELEASE, wxScrollWinEvent );
+
+// MultiTouch Events
+wxDEFINE_EVENT( wxEVT_TOUCH_BEGIN, wxMultiTouchEvent );
+wxDEFINE_EVENT( wxEVT_TOUCH_MOVE, wxMultiTouchEvent );
+wxDEFINE_EVENT( wxEVT_TOUCH_END, wxMultiTouchEvent );
+wxDEFINE_EVENT( wxEVT_TOUCH_CANCEL, wxMultiTouchEvent );
 
 // Gesture events
 wxDEFINE_EVENT( wxEVT_GESTURE_PAN, wxPanGestureEvent );
@@ -481,13 +463,33 @@ wxNcPaintEvent::wxNcPaintEvent(wxWindowBase* window)
 // wxUpdateUIEvent
 // ----------------------------------------------------------------------------
 
-#if wxUSE_LONGLONG
 wxLongLong wxUpdateUIEvent::sm_lastUpdate = 0;
-#endif
 
 long wxUpdateUIEvent::sm_updateInterval = 0;
 
 wxUpdateUIMode wxUpdateUIEvent::sm_updateMode = wxUPDATE_UI_PROCESS_ALL;
+
+void wxUpdateUIEvent::Set3StateValue(wxCheckBoxState check)
+{
+    wxASSERT_MSG(IsCheckable(), "Shouldn't be called if non-checkable");
+    wxASSERT_MSG(Is3State() || check != wxCHK_UNDETERMINED, "Is3State() not enabled");
+
+    m_3checked = check;
+    m_setChecked = true;
+}
+
+void wxUpdateUIEvent::DisallowCheck()
+{
+    wxASSERT_MSG(!GetSetChecked(), "SetCheck() or Set3StateValue() has already been called");
+
+    m_isCheckable = false;
+}
+
+void wxUpdateUIEvent::Allow3rdState(bool b /*= true*/)
+{
+    wxASSERT_MSG(b || Get3StateValue() != wxCHK_UNDETERMINED, "wxCHK_UNDETERMINED already set");
+    m_is3State = b;
+}
 
 // Can we update?
 bool wxUpdateUIEvent::CanUpdate(wxWindowBase *win)
@@ -512,7 +514,6 @@ bool wxUpdateUIEvent::CanUpdate(wxWindowBase *win)
     if (sm_updateInterval == 0)
         return true;
 
-#if wxUSE_STOPWATCH && wxUSE_LONGLONG
     wxLongLong now = wxGetLocalTimeMillis();
     if (now > (sm_lastUpdate + sm_updateInterval))
     {
@@ -520,18 +521,12 @@ bool wxUpdateUIEvent::CanUpdate(wxWindowBase *win)
     }
 
     return false;
-#else
-    // If we don't have wxStopWatch or wxLongLong, we
-    // should err on the safe side and update now anyway.
-    return true;
-#endif
 }
 
 // Reset the update time to provide a delay until the next
 // time we should update
 void wxUpdateUIEvent::ResetUpdateTime()
 {
-#if wxUSE_STOPWATCH && wxUSE_LONGLONG
     if (sm_updateInterval > 0)
     {
         wxLongLong now = wxGetLocalTimeMillis();
@@ -540,7 +535,6 @@ void wxUpdateUIEvent::ResetUpdateTime()
             sm_lastUpdate = now;
         }
     }
-#endif
 }
 
 // ----------------------------------------------------------------------------
@@ -596,6 +590,7 @@ wxMouseEvent::wxMouseEvent(wxEventType commandType)
     m_linesPerAction = 0;
     m_columnsPerAction = 0;
     m_magnification = 0.0f;
+    m_synthesized = false;
 }
 
 void wxMouseEvent::Assign(const wxMouseEvent& event)
@@ -757,7 +752,7 @@ int wxMouseEvent::GetButton() const
 }
 
 // Find the logical position of the event given the DC
-wxPoint wxMouseEvent::GetLogicalPosition(const wxDC& dc) const
+wxPoint wxMouseEvent::GetLogicalPosition(const wxReadOnlyDC& dc) const
 {
     wxPoint pt(dc.DeviceToLogicalX(m_x), dc.DeviceToLogicalY(m_y));
     return pt;
@@ -775,7 +770,6 @@ wxKeyEvent::wxKeyEvent(wxEventType type)
 
     m_x =
     m_y = wxDefaultCoord;
-    m_hasPosition = false;
 
     InitPropagation();
 }
@@ -875,10 +869,58 @@ bool wxKeyEvent::IsKeyInCategory(int category) const
             return (category & WXK_CATEGORY_JUMP) != 0;
 
         case WXK_TAB:
+            // We have to make an extra check for this one, as it's a synonym
+            // for Ctrl-I, but we don't want to recognize Ctrl-I as a TAB key.
+            // As raw key codes are platform-dependent we have to do it in
+            // platform-specific way.
+#ifdef __WXMSW__
+            // Under Windows the native WM_CHAR already does the translation
+            // and so we need to look at the scan code, which is part of the
+            // flags, rather than the key code itself.
+            if ( ((GetRawKeyFlags() >> 16) & 0xff) == 0x17 )
+            {
+                return false;
+            }
+#else // !__WXMSW__
+            // For the other platforms we can use the raw key code, but it's
+            // still different, with Mac doing its own thing. We assume all the
+            // other platforms do as GTK does and use either "I" or "i" for
+            // this letter events.
+            switch ( GetRawKeyCode() )
+            {
+#ifdef __WXOSX__
+                case 0x22: // kVK_ANSI_I
+#else
+                case 'I':
+                case 'i':
+#endif
+                    return false;
+            }
+#endif // __WXMSW__/!__WXMSW__
+            wxFALLTHROUGH;
         case WXK_NUMPAD_TAB:
             return (category & WXK_CATEGORY_TAB) != 0;
 
         case WXK_BACK:
+            // See the comment above for TAB.
+#ifdef __WXMSW__
+            if ( ((GetRawKeyFlags() >> 16) & 0xff) == 0x23 )
+            {
+                return false;
+            }
+#else // !__WXMSW__
+            switch ( GetRawKeyCode() )
+            {
+#ifdef __WXOSX__
+                case 0x04: // kVK_ANSI_H
+#else
+                case 'H':
+                case 'h':
+#endif
+                    return false;
+            }
+#endif // __WXMSW__/!__WXMSW__
+            wxFALLTHROUGH;
         case WXK_DELETE:
         case WXK_NUMPAD_DELETE:
             return (category & WXK_CATEGORY_CUT) != 0;
@@ -939,6 +981,11 @@ wxHelpEvent::Origin wxHelpEvent::GuessOrigin(Origin origin)
 // wxDPIChangedEvent
 // ----------------------------------------------------------------------------
 
+wxPoint wxDPIChangedEvent::Scale(wxPoint pt) const
+{
+    return wxRescaleCoord(pt).From(m_oldDPI).To(m_newDPI);
+}
+
 wxSize wxDPIChangedEvent::Scale(wxSize sz) const
 {
     return wxRescaleCoord(sz).From(m_oldDPI).To(m_newDPI);
@@ -993,21 +1040,6 @@ void wxEventHashTable::Clear()
 
     m_size = 0;
 }
-
-#if wxUSE_MEMORY_TRACING
-
-// Clear all tables
-void wxEventHashTable::ClearAll()
-{
-    wxEventHashTable* table = sm_first;
-    while (table)
-    {
-        table->Clear();
-        table = table->m_next;
-    }
-}
-
-#endif // wxUSE_MEMORY_TRACING
 
 bool wxEventHashTable::HandleEvent(wxEvent &event, wxEvtHandler *self)
 {
@@ -1377,7 +1409,7 @@ void wxEvtHandler::ProcessPendingEvents()
         }
     }
 
-    wxEventPtr event(pEvent);
+    std::unique_ptr<wxEvent> event(pEvent);
 
     // it's important we remove event from list before processing it, else a
     // nested event loop, for example from a modal dialog, might process the
@@ -1393,7 +1425,10 @@ void wxEvtHandler::ProcessPendingEvents()
 
     wxLEAVE_CRIT_SECT( m_pendingEventsLock );
 
-    ProcessEvent(*event);
+    // We must not let exceptions escape from here, there is no outer exception
+    // handler to catch them and so letting them do it would just terminate the
+    // program.
+    SafelyProcessEvent(*event);
 
     // careful: this object could have been deleted by the event handler
     // executed by the above ProcessEvent() call, so we can't access any fields

@@ -2,7 +2,6 @@
 // Name:        wx/odcombo.h
 // Purpose:     wxOwnerDrawnComboBox and wxVListBoxPopup
 // Author:      Jaakko Salli
-// Modified by:
 // Created:     Apr-30-2006
 // Copyright:   (c) Jaakko Salli
 // Licence:     wxWindows licence
@@ -79,7 +78,6 @@ public:
     // required virtuals
     virtual void Init() override;
     virtual bool Create(wxWindow* parent) override;
-    virtual void SetFocus() override;
     virtual wxWindow *GetControl() override { return this; }
     virtual void SetStringValue( const wxString& value ) override;
     virtual wxString GetStringValue() const override;

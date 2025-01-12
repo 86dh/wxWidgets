@@ -35,7 +35,8 @@
 
 #if wxUSE_GRAPHICS_CONTEXT
     #include "wx/graphics.h"
-    #include "wx/scopedptr.h"
+
+    #include <memory>
 #endif
 
 namespace
@@ -51,7 +52,7 @@ public:
     // Initialize the base class with the font to use. As we don't care about
     // colours (which don't affect the text measurements), don't bother to
     // specify them at all.
-    wxMarkupParserMeasureOutput(wxDC& dc, int *visibleHeight)
+    wxMarkupParserMeasureOutput(wxReadOnlyDC& dc, int *visibleHeight)
         : wxMarkupParserAttrOutput(dc.GetFont(), wxColour(), wxColour()),
           m_dc(dc),
           m_visibleHeight(visibleHeight)
@@ -92,7 +93,7 @@ public:
     }
 
 private:
-    wxDC& m_dc;
+    wxReadOnlyDC& m_dc;
 
     // The values that we compute.
     wxSize m_size;
@@ -292,7 +293,7 @@ public:
 
 private:
 #if wxUSE_GRAPHICS_CONTEXT
-    wxScopedPtr<wxGraphicsContext> m_gc;
+    std::unique_ptr<wxGraphicsContext> m_gc;
 #endif
     wxWindow* const m_win;
     int const m_rendererFlags;
@@ -308,7 +309,7 @@ private:
 // wxMarkupText implementation
 // ============================================================================
 
-wxSize wxMarkupTextBase::Measure(wxDC& dc, int *visibleHeight) const
+wxSize wxMarkupTextBase::Measure(wxReadOnlyDC& dc, int *visibleHeight) const
 {
     wxMarkupParserMeasureOutput out(dc, visibleHeight);
     wxMarkupParser parser(out);

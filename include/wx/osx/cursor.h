@@ -2,7 +2,6 @@
 // Name:        wx/osx/cursor.h
 // Purpose:     wxCursor class
 // Author:      Stefan Csomor
-// Modified by:
 // Created:     1998-01-01
 // Copyright:   (c) Stefan Csomor
 // Licence:     wxWindows licence
@@ -28,12 +27,13 @@ public:
              int hotSpotX = 0, int hotSpotY = 0);
 
     wxCursor(wxStockCursor id) { InitFromStock(id); }
-    virtual ~wxCursor();
 
     void MacInstall() const ;
 
     void SetHCURSOR(WXHCURSOR cursor);
     WXHCURSOR GetHCURSOR() const;
+
+    virtual wxPoint GetHotSpot() const override;
 
 protected:
     virtual wxGDIRefData *CreateGDIRefData() const override;

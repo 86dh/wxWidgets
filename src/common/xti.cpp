@@ -2,7 +2,6 @@
 // Name:        src/common/xti.cpp
 // Purpose:     runtime metadata information (extended class info)
 // Author:      Stefan Csomor
-// Modified by:
 // Created:     27/07/03
 // Copyright:   (c) 1997 Julian Smart
 //              (c) 2003 Stefan Csomor
@@ -18,7 +17,6 @@
 #ifndef WX_PRECOMP
     #include "wx/object.h"
     #include "wx/list.h"
-    #include "wx/hash.h"
 #endif
 
 #include "wx/xti.h"
@@ -198,7 +196,6 @@ template<> void wxStringWriteValue(wxString &s, const unsigned long &data )
     s = wxString::Format(wxT("%ld"), data );
 }
 
-#ifdef wxLongLong_t
 template<> void wxStringReadValue(const wxString &s, wxLongLong_t &data )
 {
     wxSscanf(s, wxT("%lld"), &data );
@@ -218,7 +215,7 @@ template<> void wxStringWriteValue(wxString &s, const wxULongLong_t &data )
 {
     s = wxString::Format(wxT("%lld"), data );
 }
-#endif
+
 // float
 
 template<> void wxStringReadValue(const wxString &s, float &data )
@@ -289,11 +286,8 @@ wxBUILTIN_TYPE_INFO( wxT_ULONG, unsigned_long);
 wxBUILTIN_TYPE_INFO( wxT_FLOAT, float);
 wxBUILTIN_TYPE_INFO( wxT_DOUBLE, double);
 wxBUILTIN_TYPE_INFO( wxT_STRING, wxString);
-
-#ifdef wxLongLong_t
 wxBUILTIN_TYPE_INFO(wxT_LONGLONG, wxLongLong_t)
 wxBUILTIN_TYPE_INFO(wxT_ULONGLONG, wxULongLong_t)
-#endif
 
 // this are compiler induced specialization which are never used anywhere
 

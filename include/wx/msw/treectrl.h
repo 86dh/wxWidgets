@@ -20,7 +20,9 @@
 #include "wx/textctrl.h"
 #include "wx/dynarray.h"
 #include "wx/treebase.h"
-#include "wx/hashmap.h"
+
+#include <memory>
+#include <unordered_map>
 
 #ifdef __GNUWIN32__
     // Cygwin windows.h defines these identifiers
@@ -33,9 +35,7 @@ class  WXDLLIMPEXP_FWD_CORE wxImageList;
 class  WXDLLIMPEXP_FWD_CORE wxDragImage;
 struct WXDLLIMPEXP_FWD_CORE wxTreeViewItem;
 
-// hash storing attributes for our items
 class wxItemAttr;
-WX_DECLARE_EXPORTED_VOIDPTR_HASH_MAP(wxItemAttr *, wxMapTreeAttr);
 
 // ----------------------------------------------------------------------------
 // wxTreeCtrl
@@ -46,17 +46,14 @@ class WXDLLIMPEXP_CORE wxTreeCtrl : public wxTreeCtrlBase
 public:
     // creation
     // --------
-    wxTreeCtrl() { Init(); }
+    wxTreeCtrl();
 
     wxTreeCtrl(wxWindow *parent, wxWindowID id = wxID_ANY,
                const wxPoint& pos = wxDefaultPosition,
                const wxSize& size = wxDefaultSize,
                long style = wxTR_HAS_BUTTONS | wxTR_LINES_AT_ROOT,
                const wxValidator& validator = wxDefaultValidator,
-               const wxString& name = wxASCII_STR(wxTreeCtrlNameStr))
-    {
-        Create(parent, id, pos, size, style, validator, name);
-    }
+               const wxString& name = wxASCII_STR(wxTreeCtrlNameStr));
 
     virtual ~wxTreeCtrl();
 
@@ -74,6 +71,8 @@ public:
 
     virtual unsigned int GetIndent() const override;
     virtual void SetIndent(unsigned int indent) override;
+
+    virtual void SetStateImages(const wxVector<wxBitmapBundle>& images) override;
 
     virtual void SetImageList(wxImageList *imageList) override;
     virtual void SetStateImageList(wxImageList *imageList) override;
@@ -212,6 +211,8 @@ protected:
 
     virtual bool MSWShouldSetDefaultFont() const override { return false; }
 
+    virtual int MSWGetToolTipMessage() const override;
+
     virtual void OnImagesChanged() override;
 
     // SetImageList helper
@@ -303,12 +304,15 @@ private:
     // Delete the given item from the native control.
     bool MSWDeleteItem(const wxTreeItemId& item);
 
+    void OnDPIChanged(wxDPIChangedEvent& event);
+
+
+    // Return guaranteed non-null non-owning pointer to the attribute for the
+    // given item.
+    wxItemAttr* DoGetAttrPtr(const wxTreeItemId& item);
 
     // the hash storing the items attributes (indexed by item ids)
-    wxMapTreeAttr m_attrs;
-
-    // true if the hash above is not empty
-    bool m_hasAnyAttr;
+    std::unordered_map<void*, std::unique_ptr<wxItemAttr>> m_attrs;
 
 #if wxUSE_DRAGIMAGE
     // used for dragging

@@ -2,7 +2,6 @@
 // Name:        wx/msw/checkbox.h
 // Purpose:     wxCheckBox class
 // Author:      Julian Smart
-// Modified by:
 // Created:     01/02/97
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -61,6 +60,8 @@ public:
 
 protected:
     virtual wxSize DoGetBestClientSize() const override;
+
+    virtual bool MSWGetDarkModeSupport(MSWDarkModeSupport& support) const override;
 
     virtual void DoSet3StateValue(wxCheckBoxState value) override;
     virtual wxCheckBoxState DoGet3StateValue() const override;

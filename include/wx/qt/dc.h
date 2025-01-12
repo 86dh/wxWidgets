@@ -50,6 +50,9 @@ public:
 
     virtual void Clear() override;
 
+    void UpdateClipBox();
+
+    virtual bool DoGetClippingRect(wxRect& rect) const override;
     virtual void DoSetClippingRegion(wxCoord x, wxCoord y,
                                      wxCoord width, wxCoord height) override;
 
@@ -103,6 +106,10 @@ public:
                            wxCoord xoffset, wxCoord yoffset,
                            wxPolygonFillMode fillStyle = wxODDEVEN_RULE) override;
 
+    virtual void DoDrawPolyPolygon(int n, const int count[], const wxPoint points[],
+                                   wxCoord xoffset, wxCoord yoffset,
+                                   wxPolygonFillMode fillStyle) override;
+
     // Use Qt transformations, as they automatically scale pen widths, text...
     virtual void ComputeScaleAndOrigin() override;
 
@@ -117,6 +124,9 @@ protected:
     QPixmap *m_qtPixmap;
 
     wxRegion m_clippingRegion;
+
+    bool m_isClipBoxValid = false;
+
 private:
     enum wxQtRasterColourOp
     {

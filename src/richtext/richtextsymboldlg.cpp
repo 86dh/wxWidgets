@@ -2,7 +2,6 @@
 // Name:        src/richtext/richtextsymboldlg.cpp
 // Purpose:
 // Author:      Julian Smart
-// Modified by:
 // Created:     10/5/2006 3:11:58 PM
 // Copyright:   (c) Julian Smart
 // Licence:     wxWindows licence
@@ -937,9 +936,6 @@ void wxSymbolListCtrl::OnPaint(wxPaintEvent& WXUNUSED(event))
     // fill it with background colour
     dc.SetBackground(GetBackgroundColour());
     dc.Clear();
-
-    // set the font to be displayed
-    dc.SetFont(GetFont());
 
     // the bounding rectangle of the current line
     wxRect rectRow;

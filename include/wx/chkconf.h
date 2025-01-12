@@ -184,14 +184,6 @@
 #   endif
 #endif /* !defined(wxUSE_LOG) */
 
-#ifndef wxUSE_LONGLONG
-#   ifdef wxABORT_ON_CONFIG_ERROR
-#       error "wxUSE_LONGLONG must be defined, please read comment near the top of this file."
-#   else
-#       define wxUSE_LONGLONG 0
-#   endif
-#endif /* !defined(wxUSE_LONGLONG) */
-
 #ifndef wxUSE_MIMETYPE
 #   ifdef wxABORT_ON_CONFIG_ERROR
 #       error "wxUSE_MIMETYPE must be defined, please read comment near the top of this file."
@@ -1431,17 +1423,6 @@
 #   endif
 #endif /* wxUSE_FS_INET */
 
-#if wxUSE_STOPWATCH || wxUSE_DATETIME
-#    if !wxUSE_LONGLONG
-#        ifdef wxABORT_ON_CONFIG_ERROR
-#            error "wxUSE_STOPWATCH and wxUSE_DATETIME require wxUSE_LONGLONG"
-#        else
-#            undef wxUSE_LONGLONG
-#            define wxUSE_LONGLONG 1
-#        endif
-#    endif
-#endif /* wxUSE_STOPWATCH */
-
 #if wxUSE_MIMETYPE && !wxUSE_TEXTFILE
 #   ifdef wxABORT_ON_CONFIG_ERROR
 #       error "wxUSE_MIMETYPE requires wxUSE_TEXTFILE"
@@ -2212,15 +2193,6 @@
 #   endif
 #endif /* wxUSE_XRC */
 
-#if wxUSE_SOCKETS && !wxUSE_STOPWATCH
-#   ifdef wxABORT_ON_CONFIG_ERROR
-#       error "wxUSE_SOCKETS requires wxUSE_STOPWATCH"
-#   else
-#       undef wxUSE_SOCKETS
-#       define wxUSE_SOCKETS 0
-#   endif
-#endif /* wxUSE_SOCKETS */
-
 #if wxUSE_SVG && !wxUSE_STREAMS
 #   ifdef wxABORT_ON_CONFIG_ERROR
 #       error "wxUSE_SVG requires wxUSE_STREAMS"
@@ -2289,7 +2261,8 @@
 #endif /* wxUSE_TREELISTCTRL */
 
 #if wxUSE_WEBVIEW && !(wxUSE_WEBVIEW_WEBKIT || wxUSE_WEBVIEW_WEBKIT2 || \
-                       wxUSE_WEBVIEW_IE || wxUSE_WEBVIEW_EDGE)
+                       wxUSE_WEBVIEW_IE || wxUSE_WEBVIEW_EDGE || \
+                       wxUSE_WEBVIEW_CHROMIUM)
 #   ifdef wxABORT_ON_CONFIG_ERROR
 #       error "wxUSE_WEBVIEW requires at least one backend"
 #   else
@@ -2341,17 +2314,6 @@
 #   endif
 #endif /* wxUSE_PRIVATE_FONTS */
 
-#if wxUSE_MEDIACTRL
-#   if !wxUSE_LONGLONG
-#       ifdef wxABORT_ON_CONFIG_ERROR
-#           error "wxMediaCtrl requires wxUSE_LONLONG"
-#       else
-#           undef wxUSE_LONLONG
-#           define wxUSE_LONLONG 1
-#       endif
-#   endif
-#endif /* wxUSE_MEDIACTRL */
-
 #if wxUSE_STC
 #   if !wxUSE_STOPWATCH
 #       ifdef wxABORT_ON_CONFIG_ERROR
@@ -2379,14 +2341,6 @@
 #       else
 #           undef wxUSE_RICHTEXT
 #           define wxUSE_RICHTEXT 0
-#       endif
-#   endif
-#   if !wxUSE_LONGLONG
-#       ifdef wxABORT_ON_CONFIG_ERROR
-#           error "wxRichTextCtrl requires wxUSE_LONLONG"
-#       else
-#           undef wxUSE_LONLONG
-#           define wxUSE_LONLONG 1
 #       endif
 #   endif
 #   if !wxUSE_VARIANT
